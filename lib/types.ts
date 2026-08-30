@@ -228,3 +228,15 @@ export interface RenodeFirmwareSession {
 export type FirmwareSimulationInputFactory = (request: {
   circuitJson: CircuitJson
 }) => FirmwareSimulationInput | Promise<FirmwareSimulationInput>
+
+export interface FirmwareWorkbenchConfig {
+  sourcePath: string
+  artifactPath: string
+  language?: string
+  build: {
+    command: string
+    args?: string[]
+    workingDirectory?: string
+    timeoutMilliseconds?: number
+  }
+}

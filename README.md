@@ -184,7 +184,10 @@ Then default-export a typed factory. Relative firmware paths are resolved from
 this configuration file:
 
 ```ts
-import { defineFirmwareSimulation } from "@tscircuit/renode-firmware-engine"
+import {
+  defineFirmwareSimulation,
+  defineFirmwareWorkbench,
+} from "@tscircuit/renode-firmware-engine"
 
 export default defineFirmwareSimulation(({ circuitJson }) => ({
   name: "Program over USB, then mirror SW1 onto LED1",
@@ -201,12 +204,32 @@ export default defineFirmwareSimulation(({ circuitJson }) => ({
   },
   steps: [],
 }))
+
+export const firmwareWorkbench = defineFirmwareWorkbench({
+  sourcePath: "firmware/main.S",
+  artifactPath: "generated/firmware.bin",
+  language: "arm-assembly",
+  build: {
+    command: "bun",
+    args: ["../firmware/build.ts", "firmware/main.S", "generated"],
+  },
+})
 ```
 
 The complete configuration is in
 [`tests/fixtures/samd21-usb-button-led/circuit/firmware-simulation.ts`](./tests/fixtures/samd21-usb-button-led/circuit/firmware-simulation.ts).
-Click **Program Firmware over USB** once, then interact with switches and LEDs
-without restarting or reprogramming the MCU session.
+The tab deliberately follows the physical bench workflow:
+
+1. Edit the project-owned firmware source and click **Save & Build**.
+2. Click **Plug USB cable** to power the board and expose its SAM-BA bootloader.
+3. Click **Program Firmware over USB** to transfer and execute the built binary.
+4. Run the virtual MCU clock, press switches, observe LEDs, enter the bootloader
+   again to reflash, or unplug USB to remove power.
+
+The included source blinks `LED1` while `SW1` is released and holds it on while
+the switch is pressed. The firmware editor changes the real source file; the
+build button runs the configured local toolchain, and only a current artifact
+can be programmed.
 
 The bare `createRenodeFirmwareEngine()` call uses a native `renode-test` and
 expects Renode's USB/IP server on `127.0.0.1:3240`. The Docker runner publishes

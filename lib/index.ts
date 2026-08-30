@@ -29,3 +29,9 @@ export const defineFirmwareSimulation = <
 >(
   factory: T,
 ): T => factory
+
+export const defineFirmwareWorkbench = <
+  T extends import("./types").FirmwareWorkbenchConfig,
+>(
+  config: T,
+): T => config

@@ -1,9 +1,14 @@
 import { spawn } from "node:child_process"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
-import { join } from "node:path"
+import { join, resolve } from "node:path"
 
 const fixtureDirectory = join(import.meta.dir, "..")
-const generatedDirectory = join(fixtureDirectory, "generated")
+const sourcePath = process.argv[2]
+  ? resolve(process.cwd(), process.argv[2])
+  : join(import.meta.dir, "main.S")
+const generatedDirectory = process.argv[3]
+  ? resolve(process.cwd(), process.argv[3])
+  : join(fixtureDirectory, "generated")
 const objectPath = join(generatedDirectory, "firmware.o")
 const firmwarePath = join(generatedDirectory, "firmware.elf")
 const firmwareBinaryPath = join(generatedDirectory, "firmware.bin")
@@ -18,7 +23,7 @@ const runClang = (): Promise<void> =>
         "-mcpu=cortex-m0plus",
         "-mthumb",
         "-c",
-        join(import.meta.dir, "main.S"),
+        sourcePath,
         "-o",
         objectPath,
       ],

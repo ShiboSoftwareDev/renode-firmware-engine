@@ -13,6 +13,7 @@ robot_output.xml
 log.html
 report.html
 tests/fixtures/*/generated/*
+tests/fixtures/*/circuit/generated/*
 !tests/fixtures/*/generated/.gitkeep
 !tests/fixtures/*/generated/firmware.elf
 !tests/fixtures/*/generated/firmware.bin

@@ -4,7 +4,7 @@ export default ({ circuitJson }: { circuitJson: CircuitJson }) => ({
   name: "Program over USB, then mirror SW1 onto LED1",
   circuitJson,
   firmware: {
-    path: "../generated/firmware.bin",
+    path: "generated/firmware.bin",
     format: "binary" as const,
     programming: {
       method: "usb_sam_ba" as const,
@@ -83,3 +83,15 @@ export default ({ circuitJson }: { circuitJson: CircuitJson }) => ({
   steps: [{ type: "wait" as const, milliseconds: 1 }],
   timeoutMilliseconds: 30_000,
 })
+
+export const firmwareWorkbench = {
+  sourcePath: "firmware/main.S",
+  artifactPath: "generated/firmware.bin",
+  language: "arm-assembly",
+  build: {
+    command: "bun",
+    args: ["../firmware/build.ts", "firmware/main.S", "generated"],
+    workingDirectory: ".",
+    timeoutMilliseconds: 30_000,
+  },
+}

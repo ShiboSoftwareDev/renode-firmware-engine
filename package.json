@@ -19,6 +19,7 @@
     "test": "bun test tests/unit",
     "test:e2e": "bun test tests/renode-e2e.test.ts --timeout 60000",
     "test:session:e2e": "bun test tests/renode-session-e2e.test.ts --timeout 60000",
+    "test:workbench:e2e": "bun test tests/renode-workbench-e2e.test.ts --timeout 60000",
     "build:fixture-firmware": "bun tests/fixtures/samd21-usb-button-led/firmware/build.ts",
     "format": "biome format --write .",
     "format:check": "biome format --diagnostic-level=error .",
