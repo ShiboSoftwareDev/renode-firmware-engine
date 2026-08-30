@@ -50,6 +50,7 @@ const compileStep = (
       throw new Error("Wait durations must be greater than zero")
     }
     return [
+      robotRow(["Execute Command", "pause"]),
       robotRow([
         "Execute Command",
         `emulation RunFor "${step.milliseconds / 1000}"`,
@@ -74,6 +75,7 @@ const compileStep = (
       throw new Error("LED assertion timeouts cannot be negative")
     }
     return [
+      robotRow(["Execute Command", "pause"]),
       robotRow([
         "Assert Led State",
         step.isOn ? "True" : "False",
@@ -86,8 +88,10 @@ const compileStep = (
   assertSingleLine(step.peripheralPath, "UART peripheral path")
   assertSingleLine(step.expectedLine, "Expected UART line")
   return [
+    robotRow(["Start Emulation"]),
     robotRow(["Create Terminal Tester", step.peripheralPath]),
     robotRow(["Wait For Line On Uart", step.expectedLine]),
+    robotRow(["Execute Command", "pause"]),
   ]
 }
 
@@ -164,8 +168,6 @@ export const compileRobotSuite = (
       ]),
     )
   }
-  setupRows.push(robotRow(["Start Emulation"]))
-
   const stepRows = input.steps.flatMap((step) => compileStep(step, input))
   return [
     "*** Settings ***",

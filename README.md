@@ -44,7 +44,7 @@ silently inject the application with `LoadELF`.
 ## Install
 
 ```sh
-bun add @tscircuit/renode-firmware-engine
+bun add github:ShiboSoftwareDev/renode-firmware-engine
 ```
 
 Docker is the most reproducible runner:

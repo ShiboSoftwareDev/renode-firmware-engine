@@ -19,3 +19,7 @@ jobs:
       - run: bun run test
       - name: Run Renode end-to-end test
         run: bun run test:e2e
+      - name: Run interactive Renode session test
+        run: bun run test:session:e2e
+      - name: Run complete firmware workbench test
+        run: bun run test:workbench:e2e
