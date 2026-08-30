@@ -9,21 +9,36 @@ test("keeps programmed firmware alive while switches drive LEDs", async () => {
   try {
     const initialState = await session.getState()
     expect(initialState.programming.isVerified).toBe(true)
-    expect(initialState.ledStates.LED1).toBe(false)
+    expect(initialState.leds).toContainEqual({
+      componentName: "LED1",
+      isOn: false,
+    })
 
     const pressedState = await session.setButton({
       componentName: "SW1",
       isPressed: true,
     })
-    expect(pressedState.buttonStates.SW1).toBe(true)
-    expect(pressedState.ledStates.LED1).toBe(true)
+    expect(pressedState.buttons).toContainEqual({
+      componentName: "SW1",
+      isPressed: true,
+    })
+    expect(pressedState.leds).toContainEqual({
+      componentName: "LED1",
+      isOn: true,
+    })
 
     const releasedState = await session.setButton({
       componentName: "SW1",
       isPressed: false,
     })
-    expect(releasedState.buttonStates.SW1).toBe(false)
-    expect(releasedState.ledStates.LED1).toBe(false)
+    expect(releasedState.buttons).toContainEqual({
+      componentName: "SW1",
+      isPressed: false,
+    })
+    expect(releasedState.leds).toContainEqual({
+      componentName: "LED1",
+      isOn: false,
+    })
 
     const poweredOffState = await session.powerOff()
     expect(poweredOffState.isPowered).toBe(false)
@@ -32,11 +47,17 @@ test("keeps programmed firmware alive while switches drive LEDs", async () => {
     const poweredOnState = await session.powerOn()
     expect(poweredOnState.isPowered).toBe(true)
     expect(poweredOnState.isRunning).toBe(true)
-    expect(poweredOnState.ledStates.LED1).toBe(false)
+    expect(poweredOnState.leds).toContainEqual({
+      componentName: "LED1",
+      isOn: false,
+    })
 
     const resetState = await session.reset()
     expect(resetState.isPowered).toBe(true)
-    expect(resetState.ledStates.LED1).toBe(false)
+    expect(resetState.leds).toContainEqual({
+      componentName: "LED1",
+      isOn: false,
+    })
   } finally {
     await session.stop()
   }

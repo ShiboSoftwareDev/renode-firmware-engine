@@ -239,8 +239,14 @@ export interface FirmwareSimulationSessionState {
   isPowered: boolean
   displayStatus: "ready" | "stopped"
   programming: FirmwareProgrammingResult
-  buttonStates: Record<string, boolean>
-  ledStates: Record<string, boolean>
+  buttons: Array<{
+    componentName: string
+    isPressed: boolean
+  }>
+  leds: Array<{
+    componentName: string
+    isOn: boolean
+  }>
   virtualTimeMilliseconds: number
 }
 

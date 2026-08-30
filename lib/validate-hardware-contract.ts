@@ -111,13 +111,27 @@ const getComponentPorts = (
         (firstPort.pin_number ?? 0) - (secondPort.pin_number ?? 0),
     )
 
-const getEndpointKey = (endpointType: "port" | "net", id: string): string =>
-  `${endpointType}:${id}`
+type ConnectivityEndpointKey = string & {
+  readonly connectivityEndpointKey: unique symbol
+}
+type ConnectivityGraph = Map<
+  ConnectivityEndpointKey,
+  Set<ConnectivityEndpointKey>
+>
+interface CircuitConnectivityContext {
+  circuitIndex: CircuitIndex
+  graph: ConnectivityGraph
+}
+
+const getEndpointKey = (
+  endpointType: "port" | "net",
+  id: string,
+): ConnectivityEndpointKey => `${endpointType}:${id}` as ConnectivityEndpointKey
 
 const createConnectivityGraph = (
   circuitIndex: CircuitIndex,
-): Map<string, Set<string>> => {
-  const graph = new Map<string, Set<string>>()
+): ConnectivityGraph => {
+  const graph: ConnectivityGraph = new Map()
   for (const trace of circuitIndex.traces) {
     const endpoints = [
       ...trace.connected_source_port_ids.map((id: string) =>
@@ -128,7 +142,8 @@ const createConnectivityGraph = (
       ),
     ]
     for (const endpoint of endpoints) {
-      const neighbors = graph.get(endpoint) ?? new Set<string>()
+      const neighbors =
+        graph.get(endpoint) ?? new Set<ConnectivityEndpointKey>()
       for (const otherEndpoint of endpoints) {
         if (otherEndpoint !== endpoint) neighbors.add(otherEndpoint)
       }
@@ -139,11 +154,11 @@ const createConnectivityGraph = (
 }
 
 const hasConnectivityPath = (
-  request: { start: string; end: string },
-  graph: Map<string, Set<string>>,
+  request: { start: ConnectivityEndpointKey; end: ConnectivityEndpointKey },
+  graph: ConnectivityGraph,
 ): boolean => {
   const pending = [request.start]
-  const visited = new Set<string>()
+  const visited = new Set<ConnectivityEndpointKey>()
   while (pending.length > 0) {
     const current = pending.shift()
     if (!current || visited.has(current)) continue
@@ -156,7 +171,7 @@ const hasConnectivityPath = (
 
 const arePortsConnected = (
   request: { firstPort: SourcePort; secondPort: SourcePort },
-  graph: Map<string, Set<string>>,
+  graph: ConnectivityGraph,
 ): boolean =>
   hasConnectivityPath(
     {
@@ -168,7 +183,7 @@ const arePortsConnected = (
 
 const isPortConnectedToNet = (
   request: { port: SourcePort; net: SourceNet },
-  graph: Map<string, Set<string>>,
+  graph: ConnectivityGraph,
 ): boolean =>
   hasConnectivityPath(
     {
@@ -180,7 +195,7 @@ const isPortConnectedToNet = (
 
 const areNetsConnected = (
   request: { firstNet: SourceNet; secondNet: SourceNet },
-  graph: Map<string, Set<string>>,
+  graph: ConnectivityGraph,
 ): boolean =>
   hasConnectivityPath(
     {
@@ -196,30 +211,29 @@ const hasConnectedSeriesPath = (
     secondPort: SourcePort
     seriesComponent: SourceComponent
   },
-  circuitIndex: CircuitIndex,
-  graph: Map<string, Set<string>>,
+  context: CircuitConnectivityContext,
 ): boolean => {
   const [firstSeriesPort, secondSeriesPort] = getComponentPorts(
     request.seriesComponent,
-    circuitIndex,
+    context.circuitIndex,
   )
   if (!firstSeriesPort || !secondSeriesPort) return false
   return (
     (arePortsConnected(
       { firstPort: request.firstPort, secondPort: firstSeriesPort },
-      graph,
+      context.graph,
     ) &&
       arePortsConnected(
         { firstPort: secondSeriesPort, secondPort: request.secondPort },
-        graph,
+        context.graph,
       )) ||
     (arePortsConnected(
       { firstPort: request.firstPort, secondPort: secondSeriesPort },
-      graph,
+      context.graph,
     ) &&
       arePortsConnected(
         { firstPort: firstSeriesPort, secondPort: request.secondPort },
-        graph,
+        context.graph,
       ))
   )
 }
@@ -230,28 +244,30 @@ const hasConnectedSeriesPathToNet = (
     net: SourceNet
     seriesComponent: SourceComponent
   },
-  circuitIndex: CircuitIndex,
-  graph: Map<string, Set<string>>,
+  context: CircuitConnectivityContext,
 ): boolean => {
   const [firstSeriesPort, secondSeriesPort] = getComponentPorts(
     request.seriesComponent,
-    circuitIndex,
+    context.circuitIndex,
   )
   if (!firstSeriesPort || !secondSeriesPort) return false
   return (
     (arePortsConnected(
       { firstPort: request.firstPort, secondPort: firstSeriesPort },
-      graph,
+      context.graph,
     ) &&
       isPortConnectedToNet(
         { port: secondSeriesPort, net: request.net },
-        graph,
+        context.graph,
       )) ||
     (arePortsConnected(
       { firstPort: request.firstPort, secondPort: secondSeriesPort },
-      graph,
+      context.graph,
     ) &&
-      isPortConnectedToNet({ port: firstSeriesPort, net: request.net }, graph))
+      isPortConnectedToNet(
+        { port: firstSeriesPort, net: request.net },
+        context.graph,
+      ))
   )
 }
 
@@ -703,6 +719,31 @@ const validateReset = (
   return issues
 }
 
+const getRequiredRegulatorPortIssue = (
+  request: {
+    regulatorComponentName: string
+    portName: string
+    net: SourceNet
+    netName: string
+  },
+  context: CircuitConnectivityContext,
+): string | undefined => {
+  const port = findPort(
+    {
+      componentName: request.regulatorComponentName,
+      portName: request.portName,
+    },
+    context.circuitIndex,
+  )
+  if (!port) {
+    return `Missing regulator port ${request.regulatorComponentName}.${request.portName}`
+  }
+  if (!isPortConnectedToNet({ port, net: request.net }, context.graph)) {
+    return `${request.regulatorComponentName}.${request.portName} must connect to ${request.netName}`
+  }
+  return undefined
+}
+
 const validateUsbPower = (
   request: {
     power: RenodeUsbPowerContract
@@ -710,68 +751,58 @@ const validateUsbPower = (
     vbusNet: SourceNet
     groundNet: SourceNet
   },
-  circuitIndex: CircuitIndex,
-  graph: Map<string, Set<string>>,
+  context: CircuitConnectivityContext,
 ): string[] => {
   const issues: string[] = []
-  const outputNet = findNet(request.power.outputNetName, circuitIndex)
+  const outputNet = findNet(request.power.outputNetName, context.circuitIndex)
   const regulator = findComponent(
     request.power.regulatorComponentName,
-    circuitIndex,
+    context.circuitIndex,
   )
   if (!outputNet) issues.push(`Missing net ${request.power.outputNetName}`)
   if (!regulator) {
     issues.push(`Missing regulator ${request.power.regulatorComponentName}`)
     return issues
   }
-  const requireRegulatorPort = (
-    portName: string,
-    net: SourceNet,
-    netName: string,
-  ): void => {
-    const port = findPort(
-      { componentName: request.power.regulatorComponentName, portName },
-      circuitIndex,
-    )
-    if (!port) {
-      issues.push(
-        `Missing regulator port ${request.power.regulatorComponentName}.${portName}`,
-      )
-    } else if (!isPortConnectedToNet({ port, net }, graph)) {
-      issues.push(
-        `${request.power.regulatorComponentName}.${portName} must connect to ${netName}`,
-      )
-    }
-  }
-  requireRegulatorPort(
-    request.power.inputPortName,
-    request.vbusNet,
-    request.vbusNet.name,
-  )
-  requireRegulatorPort(
-    request.power.groundPortName,
-    request.groundNet,
-    request.groundNet.name,
-  )
+  const requiredRegulatorPorts = [
+    {
+      regulatorComponentName: request.power.regulatorComponentName,
+      portName: request.power.inputPortName,
+      net: request.vbusNet,
+      netName: request.vbusNet.name,
+    },
+    {
+      regulatorComponentName: request.power.regulatorComponentName,
+      portName: request.power.groundPortName,
+      net: request.groundNet,
+      netName: request.groundNet.name,
+    },
+  ]
   if (outputNet) {
-    requireRegulatorPort(
-      request.power.outputPortName,
-      outputNet,
-      request.power.outputNetName,
-    )
+    requiredRegulatorPorts.push({
+      regulatorComponentName: request.power.regulatorComponentName,
+      portName: request.power.outputPortName,
+      net: outputNet,
+      netName: request.power.outputNetName,
+    })
   }
   if (request.power.enablePortName) {
-    requireRegulatorPort(
-      request.power.enablePortName,
-      request.vbusNet,
-      request.vbusNet.name,
-    )
+    requiredRegulatorPorts.push({
+      regulatorComponentName: request.power.regulatorComponentName,
+      portName: request.power.enablePortName,
+      net: request.vbusNet,
+      netName: request.vbusNet.name,
+    })
+  }
+  for (const requiredRegulatorPort of requiredRegulatorPorts) {
+    const issue = getRequiredRegulatorPortIssue(requiredRegulatorPort, context)
+    if (issue) issues.push(issue)
   }
   if (
     outputNet &&
     areNetsConnected(
       { firstNet: outputNet, secondNet: request.groundNet },
-      graph,
+      context.graph,
     )
   ) {
     issues.push(
@@ -781,7 +812,7 @@ const validateUsbPower = (
   for (const portName of request.power.mcuPowerPortNames) {
     const port = findPort(
       { componentName: request.mcuComponentName, portName },
-      circuitIndex,
+      context.circuitIndex,
     )
     if (!port) {
       issues.push(
@@ -789,7 +820,7 @@ const validateUsbPower = (
       )
     } else if (
       outputNet &&
-      !isPortConnectedToNet({ port, net: outputNet }, graph)
+      !isPortConnectedToNet({ port, net: outputNet }, context.graph)
     ) {
       issues.push(
         `${request.mcuComponentName}.${portName} must connect to ${request.power.outputNetName}`,
@@ -799,13 +830,15 @@ const validateUsbPower = (
   for (const portName of request.power.mcuGroundPortNames) {
     const port = findPort(
       { componentName: request.mcuComponentName, portName },
-      circuitIndex,
+      context.circuitIndex,
     )
     if (!port) {
       issues.push(
         `Missing MCU ground port ${request.mcuComponentName}.${portName}`,
       )
-    } else if (!isPortConnectedToNet({ port, net: request.groundNet }, graph)) {
+    } else if (
+      !isPortConnectedToNet({ port, net: request.groundNet }, context.graph)
+    ) {
       issues.push(
         `${request.mcuComponentName}.${portName} must connect to ${request.groundNet.name}`,
       )
@@ -821,14 +854,13 @@ const validateUsbDataLine = (
     connectorComponentName: string
     mcuComponentName: string
   },
-  circuitIndex: CircuitIndex,
-  graph: Map<string, Set<string>>,
+  context: CircuitConnectivityContext,
 ): { issues: string[]; connectorPorts: SourcePort[] } => {
   const issues: string[] = []
   const connectorPorts = request.line.connectorPortNames.flatMap((portName) => {
     const port = findPort(
       { componentName: request.connectorComponentName, portName },
-      circuitIndex,
+      context.circuitIndex,
     )
     if (port) return [port]
     issues.push(
@@ -841,7 +873,7 @@ const validateUsbDataLine = (
       componentName: request.mcuComponentName,
       portName: request.line.mcuPortName,
     },
-    circuitIndex,
+    context.circuitIndex,
   )
   if (!mcuPort) {
     issues.push(
@@ -850,7 +882,7 @@ const validateUsbDataLine = (
   }
   const resistor = findComponent(
     request.line.seriesResistorComponentName,
-    circuitIndex,
+    context.circuitIndex,
   )
   if (!resistor) {
     issues.push(
@@ -874,8 +906,7 @@ const validateUsbDataLine = (
             secondPort: mcuPort,
             seriesComponent: resistor,
           },
-          circuitIndex,
-          graph,
+          context,
         )
       ) {
         continue
@@ -930,6 +961,7 @@ const validateUsb = (
     issues.push("USB D+ and D- must use different series resistors")
   }
   const graph = createConnectivityGraph(circuitIndex)
+  const connectivityContext = { circuitIndex, graph }
   const dataPlus = validateUsbDataLine(
     {
       lineName: "D+",
@@ -937,8 +969,7 @@ const validateUsb = (
       connectorComponentName: request.usb.connectorComponentName,
       mcuComponentName: request.mcuComponentName,
     },
-    circuitIndex,
-    graph,
+    connectivityContext,
   )
   const dataMinus = validateUsbDataLine(
     {
@@ -947,8 +978,7 @@ const validateUsb = (
       connectorComponentName: request.usb.connectorComponentName,
       mcuComponentName: request.mcuComponentName,
     },
-    circuitIndex,
-    graph,
+    connectivityContext,
   )
   issues.push(...dataPlus.issues, ...dataMinus.issues)
   if (
@@ -1069,8 +1099,7 @@ const validateUsb = (
           net: groundNet,
           seriesComponent: resistor,
         },
-        circuitIndex,
-        graph,
+        connectivityContext,
       )
     ) {
       issues.push(
@@ -1087,8 +1116,7 @@ const validateUsb = (
           vbusNet,
           groundNet,
         },
-        circuitIndex,
-        graph,
+        connectivityContext,
       ),
     )
   }

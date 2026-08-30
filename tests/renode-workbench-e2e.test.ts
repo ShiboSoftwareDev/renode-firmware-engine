@@ -36,14 +36,22 @@ test("builds, USB-programs, and runs editable blinking firmware", async () => {
     const observedLedStates = new Set<boolean>()
     for (let index = 0; index < 12; index += 1) {
       const state = await session.runFor(50)
-      observedLedStates.add(state.ledStates.LED1 ?? false)
+      observedLedStates.add(
+        state.leds.find((led) => led.componentName === "LED1")?.isOn ?? false,
+      )
     }
     expect(observedLedStates).toEqual(new Set([true, false]))
 
     await session.setButton({ componentName: "SW1", isPressed: true })
     const pressedState = await session.runFor(300)
-    expect(pressedState.buttonStates.SW1).toBe(true)
-    expect(pressedState.ledStates.LED1).toBe(true)
+    expect(pressedState.buttons).toContainEqual({
+      componentName: "SW1",
+      isPressed: true,
+    })
+    expect(pressedState.leds).toContainEqual({
+      componentName: "LED1",
+      isOn: true,
+    })
   } finally {
     await session.stop()
   }

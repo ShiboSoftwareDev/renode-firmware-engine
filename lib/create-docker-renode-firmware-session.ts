@@ -59,7 +59,7 @@ const readBooleanProperty = (
 }
 
 class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
-  private buttonStates: Record<string, boolean>
+  private buttons: Array<{ componentName: string; isPressed: boolean }>
   private virtualTimeMilliseconds = 0
   private runningSince = Date.now()
   private isPowered = true
@@ -72,9 +72,10 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
     private readonly workspaceDirectory: string,
     readonly programming: FirmwareProgrammingResult,
   ) {
-    this.buttonStates = Object.fromEntries(
-      input.hardware.buttons.map((button) => [button.componentName, false]),
-    )
+    this.buttons = input.hardware.buttons.map((button) => ({
+      componentName: button.componentName,
+      isPressed: false,
+    }))
   }
 
   async getState(): Promise<FirmwareSimulationSessionState> {
@@ -84,29 +85,29 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
         isPowered: false,
         displayStatus: "stopped",
         programming: this.programming,
-        buttonStates: { ...this.buttonStates },
-        ledStates: {},
+        buttons: this.buttons.map((button) => ({ ...button })),
+        leds: [],
         virtualTimeMilliseconds: this.virtualTimeMilliseconds,
       }
     }
     this.captureElapsedWallTime()
-    const ledStates: Record<string, boolean> = {}
+    const leds: Array<{ componentName: string; isOn: boolean }> = []
     for (const led of this.input.hardware.leds) {
       const response = await this.monitor.execute(
         `${getRenodeLedPath(led)} State`,
       )
-      ledStates[led.componentName] = readBooleanProperty(
-        response,
-        `state for ${led.componentName}`,
-      )
+      leds.push({
+        componentName: led.componentName,
+        isOn: readBooleanProperty(response, `state for ${led.componentName}`),
+      })
     }
     return {
       isRunning: true,
       isPowered: true,
       displayStatus: "ready",
       programming: this.programming,
-      buttonStates: { ...this.buttonStates },
-      ledStates,
+      buttons: this.buttons.map((button) => ({ ...button })),
+      leds,
       virtualTimeMilliseconds: this.virtualTimeMilliseconds,
     }
   }
@@ -128,7 +129,11 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
     await this.monitor.execute(
       `${getRenodeButtonPath(button)} ${request.isPressed ? "Press" : "Release"}`,
     )
-    this.buttonStates[request.componentName] = request.isPressed
+    this.buttons = this.buttons.map((buttonState) =>
+      buttonState.componentName === request.componentName
+        ? { ...buttonState, isPressed: request.isPressed }
+        : buttonState,
+    )
     // Let the running MCU observe the physical edge before reporting the
     // resulting board state. This is an internal settling interval, not a
     // user-facing virtual-clock control.
@@ -166,12 +171,10 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
         `${cpuPeripheralPath} PC ${formatHex(this.input.firmware.entryPoint)}`,
       )
     }
-    this.buttonStates = Object.fromEntries(
-      this.input.hardware.buttons.map((button) => [
-        button.componentName,
-        false,
-      ]),
-    )
+    this.buttons = this.input.hardware.buttons.map((button) => ({
+      componentName: button.componentName,
+      isPressed: false,
+    }))
     await this.monitor.execute("start")
     this.runningSince = Date.now()
     return this.getState()
@@ -182,12 +185,10 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
     await this.monitor.execute("pause")
     this.captureElapsedWallTime()
     this.isPowered = false
-    this.buttonStates = Object.fromEntries(
-      this.input.hardware.buttons.map((button) => [
-        button.componentName,
-        false,
-      ]),
-    )
+    this.buttons = this.input.hardware.buttons.map((button) => ({
+      componentName: button.componentName,
+      isPressed: false,
+    }))
     return this.getState()
   }
 
