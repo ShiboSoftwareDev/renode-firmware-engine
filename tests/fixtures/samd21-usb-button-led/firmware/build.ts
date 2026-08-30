@@ -6,6 +6,7 @@ const fixtureDirectory = join(import.meta.dir, "..")
 const generatedDirectory = join(fixtureDirectory, "generated")
 const objectPath = join(generatedDirectory, "firmware.o")
 const firmwarePath = join(generatedDirectory, "firmware.elf")
+const firmwareBinaryPath = join(generatedDirectory, "firmware.bin")
 
 const runClang = (): Promise<void> =>
   new Promise((resolve, reject) => {
@@ -13,8 +14,8 @@ const runClang = (): Promise<void> =>
       process.env.CLANG ?? "clang",
       [
         "-target",
-        "armv7em-none-eabi",
-        "-mcpu=cortex-m4",
+        "armv6m-none-eabi",
+        "-mcpu=cortex-m0plus",
         "-mthumb",
         "-c",
         join(import.meta.dir, "main.S"),
@@ -64,15 +65,21 @@ const readElfTextSection = async (): Promise<Buffer> => {
   throw new Error("The assembled firmware has no .text section")
 }
 
-const wrapTextInElf = (textBytes: Buffer): Buffer => {
-  const flashAddress = 0x08000000
+const createFirmwareBinary = (textBytes: Buffer): Buffer => {
+  const flashAddress = 0x00002000
   const codeOffset = 0x100
   const entryPoint = flashAddress + codeOffset + 1
   const segmentBytes = Buffer.alloc(codeOffset + textBytes.length)
-  segmentBytes.writeUint32LE(0x20040000, 0)
+  segmentBytes.writeUint32LE(0x20004000, 0)
   segmentBytes.writeUint32LE(entryPoint, 4)
   textBytes.copy(segmentBytes, codeOffset)
+  return segmentBytes
+}
 
+const wrapBinaryInElf = (segmentBytes: Buffer): Buffer => {
+  const flashAddress = 0x00002000
+  const codeOffset = 0x100
+  const entryPoint = flashAddress + codeOffset + 1
   const segmentFileOffset = 0x1000
   const elfBytes = Buffer.alloc(segmentFileOffset + segmentBytes.length)
   elfBytes.set([0x7f, 0x45, 0x4c, 0x46, 1, 1, 1], 0)
@@ -99,4 +106,8 @@ const wrapTextInElf = (textBytes: Buffer): Buffer => {
 
 await mkdir(generatedDirectory, { recursive: true })
 await runClang()
-await writeFile(firmwarePath, wrapTextInElf(await readElfTextSection()))
+const firmwareBinary = createFirmwareBinary(await readElfTextSection())
+await Promise.all([
+  writeFile(firmwareBinaryPath, firmwareBinary),
+  writeFile(firmwarePath, wrapBinaryInElf(firmwareBinary)),
+])

@@ -15,3 +15,4 @@ report.html
 tests/fixtures/*/generated/*
 !tests/fixtures/*/generated/.gitkeep
 !tests/fixtures/*/generated/firmware.elf
+!tests/fixtures/*/generated/firmware.bin

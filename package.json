@@ -1,6 +1,6 @@
 {
   "name": "@tscircuit/renode-firmware-engine",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/tscircuit/renode-firmware-engine"
@@ -16,8 +16,8 @@
   ],
   "scripts": {
     "test": "bun test tests/unit",
-    "test:e2e": "bun test tests/renode-e2e.test.ts --timeout 30000",
-    "build:fixture-firmware": "bun tests/fixtures/stm32-button-led/firmware/build.ts",
+    "test:e2e": "bun test tests/renode-e2e.test.ts --timeout 60000",
+    "build:fixture-firmware": "bun tests/fixtures/samd21-usb-button-led/firmware/build.ts",
     "format": "biome format --write .",
     "format:check": "biome format --diagnostic-level=error .",
     "lint": "biome check .",

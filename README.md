@@ -1,19 +1,42 @@
 # @tscircuit/renode-firmware-engine
 
-A tscircuit-compatible firmware simulation engine using
+End-to-end firmware simulation for tscircuit using
 [Renode](https://renode.io/). It is the firmware counterpart to
-`@tscircuit/ngspice-spice-engine`: a small engine package owns the simulator
-process while tscircuit remains the source of truth for the physical circuit.
+`@tscircuit/ngspice-spice-engine`: tscircuit remains the source of truth for the
+physical board, while this package owns programming, execution, and behavioral
+tests.
 
-The engine:
+The default USB flow performs the same sequence as a real development cycle:
 
-- validates MCU, GPIO, LED, switch, resistor, and reference-net bindings
-  against Circuit JSON before running firmware;
-- compiles those bindings to a Renode platform overlay (`.repl`);
-- compiles test steps to a Renode Robot suite;
-- loads the same ELF intended for the physical target;
-- runs Renode natively or in the pinned `antmicro/renode:1.16.1` container;
-- returns typed pass/fail results, logs, and per-test messages.
+```text
+Circuit JSON -> hardware-contract check -> USB bootloader enumerates
+             -> host erases/transfers binary -> application starts
+             -> switches, LEDs, UART, and virtual time are tested
+```
+
+This is real host-to-device traffic inside the simulation. The host discovers a
+USB CDC/ACM bootloader through USB/IP, sends SAM-BA erase/write/execute commands,
+checks every block acknowledgement, and only then runs the firmware. It does not
+silently inject the application with `LoadELF`.
+
+## Capabilities
+
+- Programs raw Cortex-M firmware over a simulated USB SAM-BA bootloader.
+- Uses a built-in, unprivileged USB/IP host client; Docker does not need
+  `--privileged`, `sudo`, a kernel USB/IP module, or a physical `/dev/ttyACM*`.
+- Validates the MCU, USB connector MPN, both USB-C orientations, D+/D- series
+  resistors, CC pull-downs, VBUS, ground, LEDs, switches, bias resistors, and
+  MCU pin names against Circuit JSON before Renode starts.
+- Executes the programmed image on Renode's Cortex-M CPU and SoC peripheral
+  models.
+- Drives physical switch bindings and observes physical LED bindings.
+- Supports virtual-time waits and UART-line assertions.
+- Returns programming byte count, SHA-256, acknowledgement status, Robot test
+  results, process logs, and duration.
+- Retains direct ELF preloading as an explicit fast path for low-level firmware
+  tests that do not need the programming flow.
+- Runs with a native `renode-test` or the pinned
+  `antmicro/renode:1.16.1` Docker image.
 
 ## Install
 
@@ -21,8 +44,7 @@ The engine:
 bun add @tscircuit/renode-firmware-engine
 ```
 
-Use either a native Renode installation with `renode-test` on `PATH`, or
-Docker. The Docker runner is the most reproducible option:
+Docker is the most reproducible runner:
 
 ```ts
 import { readFile } from "node:fs/promises"
@@ -41,24 +63,63 @@ const engine = createRenodeFirmwareEngine({
 })
 
 const result = await engine.simulate({
-  name: "Button controls status LED",
+  name: "Program over USB, then mirror SW1 onto LED1",
   circuitJson,
   firmware: {
-    path: "dist/firmware.elf",
-    format: "elf",
+    path: "dist/firmware.bin",
+    format: "binary",
+    programming: {
+      method: "usb_sam_ba",
+      loadAddress: 0x2000,
+      cpuPeripheralPath: "sysbus.cpu0",
+    },
+    stackPointer: 0x20004000,
+    entryPoint: 0x2100,
   },
   hardware: {
     mcu: {
       componentName: "U1",
-      manufacturerPartNumber: "STM32F407VGT6",
+      manufacturerPartNumber: "ATSAMD21J17D-AFT",
     },
-    platformRepl: "platforms/cpus/stm32f4.repl",
+    platformRepl: "platforms/cpus/atsamd21j17d-aft.repl",
+    usb: {
+      connectorComponentName: "USB1",
+      connectorManufacturerPartNumber: "TYPE-C-31-M-12",
+      dataPlus: {
+        connectorPortNames: ["A6", "B6"],
+        mcuPortName: "PA25",
+        seriesResistorComponentName: "R_USB_DP",
+        expectedResistanceOhms: 22,
+      },
+      dataMinus: {
+        connectorPortNames: ["A7", "B7"],
+        mcuPortName: "PA24",
+        seriesResistorComponentName: "R_USB_DM",
+        expectedResistanceOhms: 22,
+      },
+      vbusPortNames: ["A4B9", "B4A9"],
+      vbusNetName: "VBUS",
+      groundPortNames: ["A1B12", "B1A12", "EH1", "EH2", "EH3", "EH4"],
+      groundNetName: "GND",
+      configurationChannelPullDowns: [
+        {
+          connectorPortName: "A5",
+          resistorComponentName: "R_CC1",
+          expectedResistanceOhms: 5_100,
+        },
+        {
+          connectorPortName: "B5",
+          resistorComponentName: "R_CC2",
+          expectedResistanceOhms: 5_100,
+        },
+      ],
+    },
     leds: [
       {
         componentName: "LED1",
-        mcuPortName: "PD12",
-        gpioPeripheral: "gpioPortD",
-        gpioPin: 12,
+        mcuPortName: "PA17",
+        gpioPeripheral: "gpio_a",
+        gpioPin: 17,
         drivePortName: "anode",
         referencePortName: "cathode",
         referenceNetName: "GND",
@@ -69,9 +130,10 @@ const result = await engine.simulate({
     buttons: [
       {
         componentName: "SW1",
-        mcuPortName: "PA0",
-        gpioPeripheral: "gpioPortA",
-        gpioPin: 0,
+        manufacturerPartNumber: "TS-1187A-B-A-B",
+        mcuPortName: "PA16",
+        gpioPeripheral: "gpio_a",
+        gpioPin: 16,
         signalPortName: "pin1",
         referencePortName: "pin2",
         referenceNetName: "VCC",
@@ -93,37 +155,56 @@ const result = await engine.simulate({
 })
 
 if (!result.isPassing) throw new Error(result.tests[0]?.message)
+
+console.log(result.programming)
+// {
+//   method: "usb_sam_ba",
+//   bytesWritten: 324,
+//   sha256: "dd43cae9...",
+//   isVerified: true,
+// }
 ```
 
-The bare call `createRenodeFirmwareEngine()` uses native `renode-test`.
+The bare `createRenodeFirmwareEngine()` call uses a native `renode-test` and
+expects Renode's USB/IP server on `127.0.0.1:3240`. The Docker runner publishes
+that server on a random loopback-only host port, allowing parallel test runs.
 
-## Why the hardware contract matters
+## What “programmed and verified” means
 
-The Renode GPIO number alone is not enough to protect a board/firmware design.
-Before launching Renode, this package checks the physical source netlist:
+For `usb_sam_ba`, the engine completes four observable phases:
 
-- the MCU part number and named GPIO port exist;
-- the LED is driven through the named resistor with the expected resistance;
-- the LED's other terminal reaches the expected reference net;
-- the switch signal reaches the named MCU GPIO;
-- the switch reference and optional bias resistor reach the expected nets;
-- no two simulated peripherals claim the same Renode GPIO.
+1. Renode exposes its bootloader as USB `2341:805a` by default.
+2. The host client enumerates and configures that device over USB/IP.
+3. The client erases it, transfers the exact binary in blocks, and requires an
+   acknowledgement after every flash-copy operation.
+4. Renode accepts the complete image at `loadAddress`; the CPU then starts from
+   the configured stack pointer and entry point.
 
-Changing PD12 to another pin, removing `R_LED`, swapping the switch reference,
-or changing `R_BUTTON` causes a contract error before the firmware executes.
+`programming.sha256` identifies the host binary that was transferred.
+`programming.isVerified` means the erase/write acknowledgements succeeded and
+Renode accepted the image. It is not a byte-for-byte physical-flash readback.
 
-## Included end-to-end fixture
+## Included board and firmware
 
-[`tests/fixtures/stm32-button-led`](./tests/fixtures/stm32-button-led) contains:
+[`tests/fixtures/samd21-usb-button-led`](./tests/fixtures/samd21-usb-button-led)
+is a complete executable fixture:
 
-- a tscircuit LQFP100 STM32F407VGT6 circuit with the official PA0 (pin 23) and
-  PD12 (pin 59) package positions;
-- generated Circuit JSON and a PCB snapshot;
-- Cortex-M4 assembly source and a reproducible ELF builder;
-- a Docker-backed test that loads that ELF, verifies LED1 is initially off,
-  presses SW1, verifies LED1 is on, releases SW1, and verifies LED1 is off.
+- `ATSAMD21J17D-AFT` (`JLCPCB C2053023`) Cortex-M0+ MCU;
+- `TYPE-C-31-M-12` (`JLCPCB C165948`) USB-C receptacle with both data
+  orientations, 22 ohm D+/D- resistors, and 5.1 kohm CC pull-downs;
+- `AP2112K-3.3TRG1` (`JLCPCB C51118`) 3.3 V supply, decoupling, and reset
+  circuit;
+- `TS-1187A-B-A-B` (`JLCPCB C318884`) application and reset switches with all
+  four physical pads wired;
+- PA16 application switch with a 10 kohm pull-down;
+- PA17 status LED with a 1 kohm series resistor;
+- Cortex-M0+ assembly that enables PA16's SAMD21 input buffer and mirrors the
+  switch state onto PA17;
+- generated Circuit JSON, routed PCB snapshot, raw binary, and ELF artifact;
+- a Docker-backed test that programs the binary through USB and verifies
+  off -> press/on -> release/off.
 
-Run everything with:
+Run the package and real Renode regression tests with:
 
 ```sh
 bun install
@@ -132,10 +213,10 @@ bun run build:fixture-firmware
 bun run test:e2e
 ```
 
-To rebuild the Circuit JSON:
+Rebuild the tscircuit artifacts with:
 
 ```sh
-cd tests/fixtures/stm32-button-led/circuit
+cd tests/fixtures/samd21-usb-button-led/circuit
 bun install
 tsci check netlist
 tsci check placement
@@ -145,14 +226,42 @@ tsci build
 cp dist/index/circuit.json circuit.json
 ```
 
-## Scope
+## Using the result on a manufactured board
 
-The first release supports ELF loading, GPIO buttons, LEDs, timed virtual
-execution, and UART-line assertions. The runtime and compiler interfaces are
-separate so additional Renode peripherals can be added without changing the
-process runner.
+The simulation and board use the same MCU pins and the same application binary.
+The physical MCU must already contain a USB bootloader compatible with the
+selected SAM-BA protocol and VID/PID; a blank MCU normally needs that bootloader
+installed once through SWD or as a programming service. After that, the real
+workflow is USB plug-in, bootloader entry, binary upload, reset, and application
+execution. The protocol transfer and application execution are exercised here;
+the bootloader-entry gesture is abstracted as an already-active bootloader.
 
-Firmware simulation verifies digital behavior and pin/net agreement. It does
-not replace power-integrity analysis, analog simulation, PCB DRC, USB signal
-integrity, production test, or hardware-in-the-loop validation. The fixture is
-an executable integration example, not a complete production reference design.
+Renode's `ArduinoLoader` is a protocol-level bootloader model, not execution of
+your chosen bootloader's own firmware. Test that bootloader separately if its
+reset gesture, flash protection, rollback, signing, or update policy is part of
+the product.
+
+## Direct ELF fast path
+
+For tests where programming is intentionally out of scope:
+
+```ts
+firmware: {
+  path: "dist/firmware.elf",
+  format: "elf",
+  programming: { method: "preloaded" },
+}
+```
+
+That path uses Renode `LoadELF`; it should not be presented as a USB programming
+test.
+
+## Boundaries
+
+This package closes the digital loop between board netlist, programming
+protocol, production application binary, MCU execution, and user-visible GPIO
+behavior. It cannot promise that manufactured hardware works “exactly” from
+simulation alone. Renode does not model USB eye diagrams, connector/cable loss,
+power integrity, component tolerances, ESD, oscillator startup, flash wear, or
+assembly defects. Keep tscircuit fabrication checks, analog simulation, design
+review, prototype bring-up, and hardware-in-the-loop tests in the release gate.

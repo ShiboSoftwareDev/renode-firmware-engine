@@ -4,7 +4,9 @@ import type { FirmwareSimulationInput, RenodeGeneratedSuite } from "./types"
 
 export const compileRenodeSuite = (
   input: FirmwareSimulationInput,
-  firmwareFileName = "firmware.elf",
+  firmwareFileName = input.firmware.format === "binary"
+    ? "firmware.bin"
+    : "firmware.elf",
 ): RenodeGeneratedSuite => ({
   platformRepl: `${compilePlatformRepl(input.hardware)}\n`,
   robotSuite: compileRobotSuite(input, firmwareFileName),

@@ -5,7 +5,7 @@ import {
 } from "../../lib"
 import { getFixtureInput } from "../fixture-input"
 
-test("accepts the LQFP100 button and LED wiring", async () => {
+test("accepts the SAMD21 USB, button, and LED wiring", async () => {
   const input = await getFixtureInput()
   expect(() =>
     validateHardwareContract(input.circuitJson, input.hardware),
@@ -17,7 +17,7 @@ test("rejects firmware bindings that do not match the physical netlist", async (
   const disconnectedCircuitJson = structuredClone(input.circuitJson)
   const ledDriveTraceIndex = disconnectedCircuitJson.findIndex(
     (element) =>
-      element.type === "source_trace" && element.display_name?.includes("PD12"),
+      element.type === "source_trace" && element.name === "led_mcu_to_resistor",
   )
   disconnectedCircuitJson.splice(ledDriveTraceIndex, 1)
 
@@ -26,14 +26,28 @@ test("rejects firmware bindings that do not match the physical netlist", async (
   ).toThrow(FirmwareHardwareContractError)
   expect(() =>
     validateHardwareContract(disconnectedCircuitJson, input.hardware),
-  ).toThrow("U1.PD12 must connect to LED1.anode through R_LED")
+  ).toThrow("U1.PA17 must connect to LED1.anode through R_LED")
+})
+
+test("rejects a USB data line that bypasses its series resistor", async () => {
+  const input = await getFixtureInput()
+  const disconnectedCircuitJson = structuredClone(input.circuitJson)
+  const dataPlusTraceIndex = disconnectedCircuitJson.findIndex(
+    (element) =>
+      element.type === "source_trace" && element.name === "usb_dp_to_mcu",
+  )
+  disconnectedCircuitJson.splice(dataPlusTraceIndex, 1)
+
+  expect(() =>
+    validateHardwareContract(disconnectedCircuitJson, input.hardware),
+  ).toThrow("USB1.A6 must connect to U1.PA25 through R_USB_DP")
 })
 
 test("rejects a different MCU part number", async () => {
   const input = await getFixtureInput()
-  input.hardware.mcu.manufacturerPartNumber = "STM32F407ZGT6"
+  input.hardware.mcu.manufacturerPartNumber = "ATSAMD21J18A-AU"
 
   expect(() =>
     validateHardwareContract(input.circuitJson, input.hardware),
-  ).toThrow("U1 must use STM32F407ZGT6")
+  ).toThrow("U1 must use ATSAMD21J18A-AU")
 })

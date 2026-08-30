@@ -1,5 +1,5 @@
 {
-  "name": "stm32-button-led-circuit",
+  "name": "samd21-usb-button-led-circuit",
   "private": true,
   "type": "module",
   "scripts": {

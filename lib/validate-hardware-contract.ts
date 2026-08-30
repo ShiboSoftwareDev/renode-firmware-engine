@@ -4,6 +4,8 @@ import type {
   RenodeButtonContract,
   RenodeHardwareContract,
   RenodeLedContract,
+  RenodeUsbContract,
+  RenodeUsbDataLineContract,
 } from "./types"
 
 type SourceComponent = Extract<AnyCircuitElement, { type: "source_component" }>
@@ -106,6 +108,138 @@ const getComponentPorts = (
       (firstPort, secondPort) =>
         (firstPort.pin_number ?? 0) - (secondPort.pin_number ?? 0),
     )
+
+const getEndpointKey = (endpointType: "port" | "net", id: string): string =>
+  `${endpointType}:${id}`
+
+const createConnectivityGraph = (
+  circuitIndex: CircuitIndex,
+): Map<string, Set<string>> => {
+  const graph = new Map<string, Set<string>>()
+  for (const trace of circuitIndex.traces) {
+    const endpoints = [
+      ...trace.connected_source_port_ids.map((id: string) =>
+        getEndpointKey("port", id),
+      ),
+      ...trace.connected_source_net_ids.map((id: string) =>
+        getEndpointKey("net", id),
+      ),
+    ]
+    for (const endpoint of endpoints) {
+      const neighbors = graph.get(endpoint) ?? new Set<string>()
+      for (const otherEndpoint of endpoints) {
+        if (otherEndpoint !== endpoint) neighbors.add(otherEndpoint)
+      }
+      graph.set(endpoint, neighbors)
+    }
+  }
+  return graph
+}
+
+const hasConnectivityPath = (
+  request: { start: string; end: string },
+  graph: Map<string, Set<string>>,
+): boolean => {
+  const pending = [request.start]
+  const visited = new Set<string>()
+  while (pending.length > 0) {
+    const current = pending.shift()
+    if (!current || visited.has(current)) continue
+    if (current === request.end) return true
+    visited.add(current)
+    for (const neighbor of graph.get(current) ?? []) pending.push(neighbor)
+  }
+  return false
+}
+
+const arePortsConnected = (
+  request: { firstPort: SourcePort; secondPort: SourcePort },
+  graph: Map<string, Set<string>>,
+): boolean =>
+  hasConnectivityPath(
+    {
+      start: getEndpointKey("port", request.firstPort.source_port_id),
+      end: getEndpointKey("port", request.secondPort.source_port_id),
+    },
+    graph,
+  )
+
+const isPortConnectedToNet = (
+  request: { port: SourcePort; net: SourceNet },
+  graph: Map<string, Set<string>>,
+): boolean =>
+  hasConnectivityPath(
+    {
+      start: getEndpointKey("port", request.port.source_port_id),
+      end: getEndpointKey("net", request.net.source_net_id),
+    },
+    graph,
+  )
+
+const hasConnectedSeriesPath = (
+  request: {
+    firstPort: SourcePort
+    secondPort: SourcePort
+    seriesComponent: SourceComponent
+  },
+  circuitIndex: CircuitIndex,
+  graph: Map<string, Set<string>>,
+): boolean => {
+  const [firstSeriesPort, secondSeriesPort] = getComponentPorts(
+    request.seriesComponent,
+    circuitIndex,
+  )
+  if (!firstSeriesPort || !secondSeriesPort) return false
+  return (
+    (arePortsConnected(
+      { firstPort: request.firstPort, secondPort: firstSeriesPort },
+      graph,
+    ) &&
+      arePortsConnected(
+        { firstPort: secondSeriesPort, secondPort: request.secondPort },
+        graph,
+      )) ||
+    (arePortsConnected(
+      { firstPort: request.firstPort, secondPort: secondSeriesPort },
+      graph,
+    ) &&
+      arePortsConnected(
+        { firstPort: firstSeriesPort, secondPort: request.secondPort },
+        graph,
+      ))
+  )
+}
+
+const hasConnectedSeriesPathToNet = (
+  request: {
+    firstPort: SourcePort
+    net: SourceNet
+    seriesComponent: SourceComponent
+  },
+  circuitIndex: CircuitIndex,
+  graph: Map<string, Set<string>>,
+): boolean => {
+  const [firstSeriesPort, secondSeriesPort] = getComponentPorts(
+    request.seriesComponent,
+    circuitIndex,
+  )
+  if (!firstSeriesPort || !secondSeriesPort) return false
+  return (
+    (arePortsConnected(
+      { firstPort: request.firstPort, secondPort: firstSeriesPort },
+      graph,
+    ) &&
+      isPortConnectedToNet(
+        { port: secondSeriesPort, net: request.net },
+        graph,
+      )) ||
+    (arePortsConnected(
+      { firstPort: request.firstPort, secondPort: secondSeriesPort },
+      graph,
+    ) &&
+      isPortConnectedToNet({ port: firstSeriesPort, net: request.net }, graph))
+  )
+}
 
 const hasSeriesPathBetweenPorts = (
   request: {
@@ -332,6 +466,14 @@ const validateButton = (
     issues.push(`Missing button ${request.button.componentName}`)
   else if (buttonComponent.ftype !== "simple_push_button") {
     issues.push(`${request.button.componentName} must be a push button`)
+  } else if (
+    request.button.manufacturerPartNumber &&
+    buttonComponent.manufacturer_part_number !==
+      request.button.manufacturerPartNumber
+  ) {
+    issues.push(
+      `${request.button.componentName} must use ${request.button.manufacturerPartNumber}, found ${buttonComponent.manufacturer_part_number ?? "no manufacturer part number"}`,
+    )
   }
   if (!mcuPort) {
     issues.push(
@@ -414,6 +556,245 @@ const validateButton = (
   return issues
 }
 
+const validateUsbDataLine = (
+  request: {
+    lineName: "D+" | "D-"
+    line: RenodeUsbDataLineContract
+    connectorComponentName: string
+    mcuComponentName: string
+  },
+  circuitIndex: CircuitIndex,
+  graph: Map<string, Set<string>>,
+): { issues: string[]; connectorPorts: SourcePort[] } => {
+  const issues: string[] = []
+  const connectorPorts = request.line.connectorPortNames.flatMap((portName) => {
+    const port = findPort(
+      { componentName: request.connectorComponentName, portName },
+      circuitIndex,
+    )
+    if (port) return [port]
+    issues.push(
+      `Missing USB ${request.lineName} port ${request.connectorComponentName}.${portName}`,
+    )
+    return []
+  })
+  const mcuPort = findPort(
+    {
+      componentName: request.mcuComponentName,
+      portName: request.line.mcuPortName,
+    },
+    circuitIndex,
+  )
+  if (!mcuPort) {
+    issues.push(
+      `Missing MCU USB ${request.lineName} port ${request.mcuComponentName}.${request.line.mcuPortName}`,
+    )
+  }
+  const resistor = findComponent(
+    request.line.seriesResistorComponentName,
+    circuitIndex,
+  )
+  if (!resistor) {
+    issues.push(
+      `Missing USB ${request.lineName} series resistor ${request.line.seriesResistorComponentName}`,
+    )
+  } else {
+    validateResistance(
+      {
+        component: resistor,
+        expectedResistanceOhms: request.line.expectedResistanceOhms,
+      },
+      issues,
+    )
+  }
+  if (mcuPort && resistor) {
+    for (const connectorPort of connectorPorts) {
+      if (
+        hasConnectedSeriesPath(
+          {
+            firstPort: connectorPort,
+            secondPort: mcuPort,
+            seriesComponent: resistor,
+          },
+          circuitIndex,
+          graph,
+        )
+      ) {
+        continue
+      }
+      issues.push(
+        `${request.connectorComponentName}.${connectorPort.name} must connect to ${request.mcuComponentName}.${request.line.mcuPortName} through ${request.line.seriesResistorComponentName}`,
+      )
+    }
+  }
+  return { issues, connectorPorts }
+}
+
+const validateUsb = (
+  request: { usb: RenodeUsbContract; mcuComponentName: string },
+  circuitIndex: CircuitIndex,
+): string[] => {
+  const issues: string[] = []
+  const connector = findComponent(
+    request.usb.connectorComponentName,
+    circuitIndex,
+  )
+  if (!connector) {
+    issues.push(`Missing USB connector ${request.usb.connectorComponentName}`)
+  } else if (
+    request.usb.connectorManufacturerPartNumber &&
+    connector.manufacturer_part_number !==
+      request.usb.connectorManufacturerPartNumber
+  ) {
+    issues.push(
+      `${request.usb.connectorComponentName} must use ${request.usb.connectorManufacturerPartNumber}, found ${connector.manufacturer_part_number ?? "no manufacturer part number"}`,
+    )
+  }
+  if (request.usb.dataPlus.connectorPortNames.length === 0) {
+    issues.push("USB D+ must define at least one connector port")
+  }
+  if (request.usb.dataMinus.connectorPortNames.length === 0) {
+    issues.push("USB D- must define at least one connector port")
+  }
+  if (request.usb.vbusPortNames.length === 0) {
+    issues.push("USB VBUS must define at least one connector port")
+  }
+  if (request.usb.groundPortNames.length === 0) {
+    issues.push("USB ground must define at least one connector port")
+  }
+  if (request.usb.dataPlus.mcuPortName === request.usb.dataMinus.mcuPortName) {
+    issues.push("USB D+ and D- must use different MCU ports")
+  }
+  if (
+    request.usb.dataPlus.seriesResistorComponentName ===
+    request.usb.dataMinus.seriesResistorComponentName
+  ) {
+    issues.push("USB D+ and D- must use different series resistors")
+  }
+  const graph = createConnectivityGraph(circuitIndex)
+  const dataPlus = validateUsbDataLine(
+    {
+      lineName: "D+",
+      line: request.usb.dataPlus,
+      connectorComponentName: request.usb.connectorComponentName,
+      mcuComponentName: request.mcuComponentName,
+    },
+    circuitIndex,
+    graph,
+  )
+  const dataMinus = validateUsbDataLine(
+    {
+      lineName: "D-",
+      line: request.usb.dataMinus,
+      connectorComponentName: request.usb.connectorComponentName,
+      mcuComponentName: request.mcuComponentName,
+    },
+    circuitIndex,
+    graph,
+  )
+  issues.push(...dataPlus.issues, ...dataMinus.issues)
+  if (
+    dataPlus.connectorPorts[0] &&
+    dataMinus.connectorPorts[0] &&
+    arePortsConnected(
+      {
+        firstPort: dataPlus.connectorPorts[0],
+        secondPort: dataMinus.connectorPorts[0],
+      },
+      graph,
+    )
+  ) {
+    issues.push("USB D+ and D- must not be shorted together")
+  }
+
+  const vbusNet = findNet(request.usb.vbusNetName, circuitIndex)
+  const groundNet = findNet(request.usb.groundNetName, circuitIndex)
+  if (!vbusNet) issues.push(`Missing net ${request.usb.vbusNetName}`)
+  if (!groundNet) issues.push(`Missing net ${request.usb.groundNetName}`)
+  for (const portName of request.usb.vbusPortNames) {
+    const port = findPort(
+      { componentName: request.usb.connectorComponentName, portName },
+      circuitIndex,
+    )
+    if (!port) {
+      issues.push(
+        `Missing USB VBUS port ${request.usb.connectorComponentName}.${portName}`,
+      )
+    } else if (
+      vbusNet &&
+      !isPortConnectedToNet({ port, net: vbusNet }, graph)
+    ) {
+      issues.push(
+        `${request.usb.connectorComponentName}.${portName} must connect to ${request.usb.vbusNetName}`,
+      )
+    }
+  }
+  for (const portName of request.usb.groundPortNames) {
+    const port = findPort(
+      { componentName: request.usb.connectorComponentName, portName },
+      circuitIndex,
+    )
+    if (!port) {
+      issues.push(
+        `Missing USB ground port ${request.usb.connectorComponentName}.${portName}`,
+      )
+    } else if (
+      groundNet &&
+      !isPortConnectedToNet({ port, net: groundNet }, graph)
+    ) {
+      issues.push(
+        `${request.usb.connectorComponentName}.${portName} must connect to ${request.usb.groundNetName}`,
+      )
+    }
+  }
+
+  for (const pullDown of request.usb.configurationChannelPullDowns ?? []) {
+    const connectorPort = findPort(
+      {
+        componentName: request.usb.connectorComponentName,
+        portName: pullDown.connectorPortName,
+      },
+      circuitIndex,
+    )
+    const resistor = findComponent(pullDown.resistorComponentName, circuitIndex)
+    if (!connectorPort) {
+      issues.push(
+        `Missing USB configuration-channel port ${request.usb.connectorComponentName}.${pullDown.connectorPortName}`,
+      )
+    }
+    if (!resistor) {
+      issues.push(`Missing USB pull-down ${pullDown.resistorComponentName}`)
+    } else {
+      validateResistance(
+        {
+          component: resistor,
+          expectedResistanceOhms: pullDown.expectedResistanceOhms,
+        },
+        issues,
+      )
+    }
+    if (
+      connectorPort &&
+      resistor &&
+      groundNet &&
+      !hasConnectedSeriesPathToNet(
+        {
+          firstPort: connectorPort,
+          net: groundNet,
+          seriesComponent: resistor,
+        },
+        circuitIndex,
+        graph,
+      )
+    ) {
+      issues.push(
+        `${request.usb.connectorComponentName}.${pullDown.connectorPortName} must connect to ${request.usb.groundNetName} through ${pullDown.resistorComponentName}`,
+      )
+    }
+  }
+  return issues
+}
+
 const validateRenodeBindings = (hardware: RenodeHardwareContract): string[] => {
   const issues: string[] = []
   const renodeNames = [...hardware.leds, ...hardware.buttons].map(
@@ -473,6 +854,14 @@ export const validateHardwareContract = (
     issues.push(
       ...validateButton(
         { button, mcuComponentName: hardware.mcu.componentName },
+        circuitIndex,
+      ),
+    )
+  }
+  if (hardware.usb) {
+    issues.push(
+      ...validateUsb(
+        { usb: hardware.usb, mcuComponentName: hardware.mcu.componentName },
         circuitIndex,
       ),
     )

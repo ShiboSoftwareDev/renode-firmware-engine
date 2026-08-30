@@ -104,17 +104,44 @@ export const compileRobotSuite = (
       "Execute Command",
       `machine LoadPlatformDescription @\${CURDIR}/platform.repl`,
     ]),
-    robotRow([
-      "Execute Command",
-      `sysbus LoadELF @\${CURDIR}/${firmwareFileName}`,
-    ]),
   ]
+
+  if (input.firmware.format === "elf") {
+    setupRows.push(
+      robotRow([
+        "Execute Command",
+        `sysbus LoadELF @\${CURDIR}/${firmwareFileName}`,
+      ]),
+    )
+  } else {
+    const programming = input.firmware.programming
+    const cpuPeripheralPath = programming.cpuPeripheralPath ?? "sysbus.cpu"
+    assertSingleLine(cpuPeripheralPath, "CPU peripheral path")
+    setupRows.push(
+      robotRow(["Execute Command", "emulation CreateUSBIPServer"]),
+      robotRow([
+        "Execute Command",
+        `host.usb CreateArduinoLoader ${cpuPeripheralPath} ${formatHex(programming.loadAddress)} 0 "firmwareLoader"`,
+      ]),
+      robotRow([
+        `\${PROGRAMMING_RESULT}=`,
+        "Execute Command",
+        `firmwareLoader WaitForBinary ${Math.ceil((programming.timeoutMilliseconds ?? 20_000) / 1000)} false`,
+      ]),
+      robotRow(["Log", `\${PROGRAMMING_RESULT}`]),
+    )
+  }
+
+  const cpuPeripheralPath =
+    input.firmware.format === "binary"
+      ? (input.firmware.programming.cpuPeripheralPath ?? "sysbus.cpu")
+      : "cpu"
 
   if (input.firmware.stackPointer !== undefined) {
     setupRows.push(
       robotRow([
         "Execute Command",
-        `cpu SetRegisterUnsafe 13 ${formatHex(input.firmware.stackPointer)}`,
+        `${cpuPeripheralPath} SetRegister 13 ${formatHex(input.firmware.stackPointer)}`,
       ]),
     )
   }
@@ -122,7 +149,7 @@ export const compileRobotSuite = (
     setupRows.push(
       robotRow([
         "Execute Command",
-        `cpu PC ${formatHex(input.firmware.entryPoint)}`,
+        `${cpuPeripheralPath} PC ${formatHex(input.firmware.entryPoint)}`,
       ]),
     )
   }
