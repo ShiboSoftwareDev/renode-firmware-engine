@@ -58,21 +58,33 @@ const readBooleanProperty = (
   throw new Error(`Renode did not return a boolean ${description}`)
 }
 
+interface DockerRenodeFirmwareSessionRequest {
+  input: FirmwareSimulationInput
+  monitor: RenodeMonitorClient
+  child: ChildProcessWithoutNullStreams
+  workspaceDirectory: string
+  programming: FirmwareProgrammingResult
+}
+
 class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
+  private readonly input: FirmwareSimulationInput
+  private readonly monitor: RenodeMonitorClient
+  private readonly child: ChildProcessWithoutNullStreams
+  private readonly workspaceDirectory: string
+  readonly programming: FirmwareProgrammingResult
   private buttons: Array<{ componentName: string; isPressed: boolean }>
   private virtualTimeMilliseconds = 0
   private runningSince = Date.now()
   private isPowered = true
   private isStopped = false
 
-  constructor(
-    private readonly input: FirmwareSimulationInput,
-    private readonly monitor: RenodeMonitorClient,
-    private readonly child: ChildProcessWithoutNullStreams,
-    private readonly workspaceDirectory: string,
-    readonly programming: FirmwareProgrammingResult,
-  ) {
-    this.buttons = input.hardware.buttons.map((button) => ({
+  constructor(request: DockerRenodeFirmwareSessionRequest) {
+    this.input = request.input
+    this.monitor = request.monitor
+    this.child = request.child
+    this.workspaceDirectory = request.workspaceDirectory
+    this.programming = request.programming
+    this.buttons = request.input.hardware.buttons.map((button) => ({
       componentName: button.componentName,
       isPressed: false,
     }))
@@ -338,13 +350,13 @@ export const createDockerRenodeFirmwareSession = async (
     await monitor.execute('emulation RunFor "0.001"')
     await monitor.execute("start")
 
-    return new DockerRenodeFirmwareSession(
+    return new DockerRenodeFirmwareSession({
       input,
       monitor,
       child,
       workspaceDirectory,
-      programmingReceipt,
-    )
+      programming: programmingReceipt,
+    })
   } catch (error) {
     monitor?.close()
     child.kill("SIGKILL")
