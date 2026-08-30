@@ -61,6 +61,7 @@ const readBooleanProperty = (
 class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
   private buttonStates: Record<string, boolean>
   private virtualTimeMilliseconds = 0
+  private runningSince = Date.now()
   private isPowered = true
   private isStopped = false
 
@@ -88,6 +89,7 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
         virtualTimeMilliseconds: this.virtualTimeMilliseconds,
       }
     }
+    this.captureElapsedWallTime()
     const ledStates: Record<string, boolean> = {}
     for (const led of this.input.hardware.leds) {
       const response = await this.monitor.execute(
@@ -127,6 +129,9 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
       `${getRenodeButtonPath(button)} ${request.isPressed ? "Press" : "Release"}`,
     )
     this.buttonStates[request.componentName] = request.isPressed
+    // Let the running MCU observe the physical edge before reporting the
+    // resulting board state. This is an internal settling interval, not a
+    // user-facing virtual-clock control.
     return this.runFor(1)
   }
 
@@ -136,14 +141,20 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
     if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
       throw new Error("Virtual time must be greater than zero")
     }
+    await this.monitor.execute("pause")
+    this.captureElapsedWallTime()
     await this.monitor.execute(`emulation RunFor "${milliseconds / 1000}"`)
     this.virtualTimeMilliseconds += milliseconds
+    await this.monitor.execute("start")
+    this.runningSince = Date.now()
     return this.getState()
   }
 
   async reset(): Promise<FirmwareSimulationSessionState> {
     if (this.isStopped) throw new Error("The firmware session is stopped")
     if (!this.isPowered) throw new Error("The simulated board is not powered")
+    await this.monitor.execute("pause")
+    this.captureElapsedWallTime()
     await this.monitor.execute("machine Reset")
     if (this.input.firmware.format === "binary") {
       const programming = this.input.firmware.programming
@@ -161,11 +172,15 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
         false,
       ]),
     )
-    return this.runFor(1)
+    await this.monitor.execute("start")
+    this.runningSince = Date.now()
+    return this.getState()
   }
 
   async powerOff(): Promise<FirmwareSimulationSessionState> {
     if (this.isStopped) throw new Error("The firmware session is stopped")
+    await this.monitor.execute("pause")
+    this.captureElapsedWallTime()
     this.isPowered = false
     this.buttonStates = Object.fromEntries(
       this.input.hardware.buttons.map((button) => [
@@ -179,6 +194,7 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
   async powerOn(): Promise<FirmwareSimulationSessionState> {
     if (this.isStopped) throw new Error("The firmware session is stopped")
     this.isPowered = true
+    this.runningSince = Date.now()
     return this.reset()
   }
 
@@ -189,6 +205,13 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
     this.monitor.close()
     await waitForProcessExit(this.child, 5_000)
     await rm(this.workspaceDirectory, { recursive: true, force: true })
+  }
+
+  private captureElapsedWallTime(): void {
+    if (!this.isPowered) return
+    const now = Date.now()
+    this.virtualTimeMilliseconds += Math.max(0, now - this.runningSince)
+    this.runningSince = now
   }
 }
 
@@ -312,6 +335,7 @@ export const createDockerRenodeFirmwareSession = async (
       `${cpuPeripheralPath} PC ${formatHex(input.firmware.entryPoint)}`,
     )
     await monitor.execute('emulation RunFor "0.001"')
+    await monitor.execute("start")
 
     return new DockerRenodeFirmwareSession(
       input,
