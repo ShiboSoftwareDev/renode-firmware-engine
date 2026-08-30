@@ -1,4 +1,4 @@
-import { createDockerRenodeRunner, createRenodeFirmwareEngine } from "../lib"
+import { createRenodeFirmwareEngine } from "../lib"
 import { getFixtureInput } from "../tests/fixture-input"
 
 const input = await getFixtureInput()
@@ -12,9 +12,7 @@ console.log(
 )
 console.log("\nProgramming and running firmware...")
 
-const engine = createRenodeFirmwareEngine({
-  runner: createDockerRenodeRunner(),
-})
+const engine = createRenodeFirmwareEngine()
 const result = await engine.simulate(input)
 
 console.log(`\nSimulation ${result.displayStatus.toUpperCase()}`)

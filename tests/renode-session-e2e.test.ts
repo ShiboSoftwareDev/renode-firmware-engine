@@ -1,11 +1,9 @@
 import { expect, test } from "bun:test"
-import { createDockerRenodeFirmwareSession } from "../lib"
+import { createRenodeFirmwareSession } from "../lib"
 import { getFixtureInput } from "./fixture-input"
 
 test("keeps programmed firmware alive while switches drive LEDs", async () => {
-  const session = await createDockerRenodeFirmwareSession(
-    await getFixtureInput(),
-  )
+  const session = await createRenodeFirmwareSession(await getFixtureInput())
   try {
     const initialState = await session.getState()
     expect(initialState.programming.isVerified).toBe(true)
@@ -61,4 +59,4 @@ test("keeps programmed firmware alive while switches drive LEDs", async () => {
   } finally {
     await session.stop()
   }
-}, 60_000)
+}, 300_000)

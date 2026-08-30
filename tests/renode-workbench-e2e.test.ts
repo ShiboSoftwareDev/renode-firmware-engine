@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
-import { createDockerRenodeFirmwareSession } from "../lib"
+import { createRenodeFirmwareSession } from "../lib"
 import firmwareSimulation from "./fixtures/samd21-usb-button-led/circuit/firmware-simulation"
 
 const circuitDirectory = join(
@@ -31,7 +31,7 @@ test("builds, USB-programs, and runs editable blinking firmware", async () => {
       path: join(circuitDirectory, unresolvedInput.firmware.path),
     },
   }
-  const session = await createDockerRenodeFirmwareSession(input)
+  const session = await createRenodeFirmwareSession(input)
   try {
     const observedLedStates = new Set<boolean>()
     for (let index = 0; index < 12; index += 1) {

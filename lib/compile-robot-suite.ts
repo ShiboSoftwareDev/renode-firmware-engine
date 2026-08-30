@@ -139,7 +139,7 @@ export const compileRobotSuite = (
   const cpuPeripheralPath =
     input.firmware.format === "binary"
       ? (input.firmware.programming.cpuPeripheralPath ?? "sysbus.cpu")
-      : "cpu"
+      : (input.firmware.cpuPeripheralPath ?? "sysbus.cpu")
 
   if (input.firmware.stackPointer !== undefined) {
     setupRows.push(

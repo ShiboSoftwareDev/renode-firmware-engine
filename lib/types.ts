@@ -103,6 +103,7 @@ export interface RenodePreloadedFirmwareImage {
   programming?: {
     method: "preloaded"
   }
+  cpuPeripheralPath?: string
   entryPoint?: number
   stackPointer?: number
 }
@@ -258,6 +259,11 @@ export interface RenodeFirmwareSession {
     isPressed: boolean
   }) => Promise<FirmwareSimulationSessionState>
   runFor: (milliseconds: number) => Promise<FirmwareSimulationSessionState>
+  waitForUartLine?: (request: {
+    peripheralPath: string
+    expectedLine: string
+    timeoutMilliseconds?: number
+  }) => Promise<void>
   reset: () => Promise<FirmwareSimulationSessionState>
   powerOff: () => Promise<FirmwareSimulationSessionState>
   powerOn: () => Promise<FirmwareSimulationSessionState>

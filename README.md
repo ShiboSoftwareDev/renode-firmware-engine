@@ -22,8 +22,8 @@ silently inject the application with `LoadELF`.
 ## Capabilities
 
 - Programs raw Cortex-M firmware over a simulated USB SAM-BA bootloader.
-- Uses a built-in, unprivileged USB/IP host client; Docker does not need
-  `--privileged`, `sudo`, a kernel USB/IP module, or a physical `/dev/ttyACM*`.
+- Uses a built-in, unprivileged USB/IP host client; it does not need `sudo`, a
+  kernel USB/IP module, or a physical `/dev/ttyACM*`.
 - Validates the MCU, USB connector MPN, both USB-C orientations, D+/D- series
   resistors, CC pull-downs, VBUS, regulator, MCU power/ground pins, reset
   switch, reset pull-up, LEDs, switches, bias resistors, and MCU pin names
@@ -38,8 +38,8 @@ silently inject the application with `LoadELF`.
   results, process logs, and duration.
 - Retains direct ELF preloading as an explicit fast path for low-level firmware
   tests that do not need the programming flow.
-- Runs with a native `renode-test` or the pinned
-  `antmicro/renode:1.16.1` Docker image.
+- Lazily installs and runs the pinned Renode 1.16.1 portable runtime for the
+  current host, with its release checksum verified before extraction.
 
 ## Install
 
@@ -47,13 +47,13 @@ silently inject the application with `LoadELF`.
 bun add github:ShiboSoftwareDev/renode-firmware-engine
 ```
 
-Docker is the most reproducible runner:
+The default engine ensures the managed native runtime only when simulation is
+actually requested:
 
 ```ts
 import { readFile } from "node:fs/promises"
 import type { CircuitJson } from "circuit-json"
 import {
-  createDockerRenodeRunner,
   createRenodeFirmwareEngine,
 } from "@tscircuit/renode-firmware-engine"
 
@@ -61,9 +61,7 @@ const circuitJson = JSON.parse(
   await readFile("dist/index/circuit.json", "utf8"),
 ) as CircuitJson
 
-const engine = createRenodeFirmwareEngine({
-  runner: createDockerRenodeRunner(),
-})
+const engine = createRenodeFirmwareEngine()
 
 const result = await engine.simulate({
   name: "Program over USB, then mirror SW1 onto LED1",
@@ -179,6 +177,7 @@ Point `tscircuit.config.json` at a project-local simulation definition:
 
 ```json
 {
+  "firmwareSimulationEngine": "renode",
   "firmwareSimulationConfigPath": "firmware-simulation.ts"
 }
 ```
@@ -236,9 +235,11 @@ the switch is pressed. The firmware editor changes the real source file; the
 build button runs the configured local toolchain, and only a current artifact
 can be programmed.
 
-The bare `createRenodeFirmwareEngine()` call uses a native `renode-test` and
-expects Renode's USB/IP server on `127.0.0.1:3240`. The Docker runner publishes
-that server on a random loopback-only host port, allowing parallel test runs.
+The bare `createRenodeFirmwareEngine()` call installs Renode 1.16.1 into the
+user cache on first use, then drives the cached executable directly through its
+monitor protocol. It does not require Robot Framework or Python modules, and
+nothing is fetched when this package is merely imported. Set
+`TSCIRCUIT_RENODE_CACHE_DIR` to move the managed runtime cache.
 
 ## What “programmed and verified” means
 
@@ -272,7 +273,7 @@ is a complete executable fixture:
 - Cortex-M0+ assembly that enables PA16's SAMD21 input buffer and mirrors the
   switch state onto PA17;
 - generated Circuit JSON, routed PCB snapshot, raw binary, and ELF artifact;
-- a Docker-backed test that programs the binary through USB and verifies
+- a native Renode test that programs the binary through USB and verifies
   off -> press/on -> release/off.
 
 Run the package and real Renode regression tests with:

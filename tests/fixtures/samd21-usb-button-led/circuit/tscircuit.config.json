@@ -1,4 +1,5 @@
 {
   "$schema": "https://cdn.jsdelivr.net/npm/@tscircuit/cli/types/tscircuit.config.schema.json",
+  "firmwareSimulationEngine": "renode",
   "firmwareSimulationConfigPath": "firmware-simulation.ts"
 }
