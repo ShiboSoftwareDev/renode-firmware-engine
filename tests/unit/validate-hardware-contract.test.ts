@@ -42,7 +42,7 @@ test("rejects a direct switch LED path that bypasses its series resistor", async
   expect(() =>
     validateHardwareContract(disconnectedCircuitJson, input.hardware),
   ).toThrow(
-    "SW_DIRECT_1.pin2 must connect to LED_DIRECT_1.anode through R_LED_DIRECT_1",
+    "SW_DIRECT_1.pin1 must connect to LED_DIRECT_1.anode through R_LED_DIRECT_1",
   )
 })
 

@@ -67,9 +67,9 @@ export const getFixtureInput = async (): Promise<FirmwareSimulationInput> => {
       directSwitchLedCircuits: [
         {
           switchComponentName: "SW_DIRECT_1",
-          switchInputPortName: "pin1",
-          switchOutputPortName: "pin2",
-          actuation: "momentary",
+          switchInputPortName: "pin2",
+          switchOutputPortName: "pin1",
+          actuation: "latching",
           supplyNetName: "VCC",
           ledComponentName: "LED_DIRECT_1",
           ledAnodePortName: "anode",
@@ -80,9 +80,9 @@ export const getFixtureInput = async (): Promise<FirmwareSimulationInput> => {
         },
         {
           switchComponentName: "SW_DIRECT_2",
-          switchInputPortName: "pin1",
-          switchOutputPortName: "pin2",
-          actuation: "momentary",
+          switchInputPortName: "pin2",
+          switchOutputPortName: "pin1",
+          actuation: "latching",
           supplyNetName: "VCC",
           ledComponentName: "LED_DIRECT_2",
           ledAnodePortName: "anode",

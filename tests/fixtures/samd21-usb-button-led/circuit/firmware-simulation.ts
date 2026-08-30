@@ -51,9 +51,9 @@ export default ({ circuitJson }: { circuitJson: CircuitJson }) => ({
     directSwitchLedCircuits: [
       {
         switchComponentName: "SW_DIRECT_1",
-        switchInputPortName: "pin1",
-        switchOutputPortName: "pin2",
-        actuation: "momentary" as const,
+        switchInputPortName: "pin2",
+        switchOutputPortName: "pin1",
+        actuation: "latching" as const,
         supplyNetName: "VCC",
         ledComponentName: "LED_DIRECT_1",
         ledAnodePortName: "anode",
@@ -64,9 +64,9 @@ export default ({ circuitJson }: { circuitJson: CircuitJson }) => ({
       },
       {
         switchComponentName: "SW_DIRECT_2",
-        switchInputPortName: "pin1",
-        switchOutputPortName: "pin2",
-        actuation: "momentary" as const,
+        switchInputPortName: "pin2",
+        switchOutputPortName: "pin1",
+        actuation: "latching" as const,
         supplyNetName: "VCC",
         ledComponentName: "LED_DIRECT_2",
         ledAnodePortName: "anode",

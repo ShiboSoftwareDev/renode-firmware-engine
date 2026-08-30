@@ -1,5 +1,6 @@
 import { AP2112K_3_3TRG1 } from "./imports/AP2112K_3_3TRG1"
 import { ATSAMD21J17D_AFT } from "./imports/ATSAMD21J17D_AFT"
+import { MSK12C02 } from "./imports/MSK12C02"
 import { TS_1187A_B_A_B } from "./imports/TS_1187A_B_A_B"
 import { TYPE_C_31_M_12 } from "./imports/TYPE_C_31_M_12"
 
@@ -201,9 +202,9 @@ export default () => (
       schY={-7}
     />
 
-    <TS_1187A_B_A_B
+    <MSK12C02
       name="SW_DIRECT_1"
-      manufacturerPartNumber="TS-1187A-B-A-B"
+      manufacturerPartNumber="MSK12C02"
       pcbX={28}
       pcbY={16}
       schX={20}
@@ -230,9 +231,9 @@ export default () => (
       schY={10}
     />
 
-    <TS_1187A_B_A_B
+    <MSK12C02
       name="SW_DIRECT_2"
-      manufacturerPartNumber="TS-1187A-B-A-B"
+      manufacturerPartNumber="MSK12C02"
       pcbX={28}
       pcbY={7}
       schX={20}
@@ -319,42 +320,30 @@ export default () => (
     <trace name="reset_pullup" from=".U1 > .RESET" to=".R_RESET > .pin1" />
     <trace from=".R_RESET > .pin2" to="net.VCC" />
 
-    <trace from="net.VCC" to=".SW_DIRECT_1 > .pin1" />
-    <trace
-      name="direct_switch_1_pair_a"
-      from=".SW_DIRECT_1 > .pin3"
-      to=".SW_DIRECT_1 > .pin1"
-    />
+    <trace from="net.VCC" to=".SW_DIRECT_1 > .pin2" />
     <trace
       name="direct_switch_1_output"
-      from=".SW_DIRECT_1 > .pin2"
+      from=".SW_DIRECT_1 > .pin1"
       to=".R_LED_DIRECT_1 > .pin1"
     />
     <trace
-      name="direct_switch_1_pair_b"
-      from=".SW_DIRECT_1 > .pin4"
-      to=".SW_DIRECT_1 > .pin2"
+      name="direct_switch_1_resistor_to_led"
+      from=".R_LED_DIRECT_1 > .pin2"
+      to=".LED_DIRECT_1 > .anode"
     />
-    <trace from=".R_LED_DIRECT_1 > .pin2" to=".LED_DIRECT_1 > .anode" />
     <trace from=".LED_DIRECT_1 > .cathode" to="net.GND" />
 
-    <trace from="net.VCC" to=".SW_DIRECT_2 > .pin1" />
-    <trace
-      name="direct_switch_2_pair_a"
-      from=".SW_DIRECT_2 > .pin3"
-      to=".SW_DIRECT_2 > .pin1"
-    />
+    <trace from="net.VCC" to=".SW_DIRECT_2 > .pin2" />
     <trace
       name="direct_switch_2_output"
-      from=".SW_DIRECT_2 > .pin2"
+      from=".SW_DIRECT_2 > .pin1"
       to=".R_LED_DIRECT_2 > .pin1"
     />
     <trace
-      name="direct_switch_2_pair_b"
-      from=".SW_DIRECT_2 > .pin4"
-      to=".SW_DIRECT_2 > .pin2"
+      name="direct_switch_2_resistor_to_led"
+      from=".R_LED_DIRECT_2 > .pin2"
+      to=".LED_DIRECT_2 > .anode"
     />
-    <trace from=".R_LED_DIRECT_2 > .pin2" to=".LED_DIRECT_2 > .anode" />
     <trace from=".LED_DIRECT_2 > .cathode" to="net.GND" />
 
     <trace from=".U1 > .GND1" to="net.GND" />
