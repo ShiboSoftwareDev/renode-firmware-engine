@@ -1,0 +1,15 @@
+{
+  "name": "stm32-button-led-circuit",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsci build",
+    "check:netlist": "tsci check netlist",
+    "check:placement": "tsci check placement"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "tscircuit": "^0.0.2461",
+    "typescript": "^5.9.3"
+  }
+}

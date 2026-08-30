@@ -1,0 +1,17 @@
+node_modules
+bun.lock
+.tscircuit
+dist
+coverage
+*.lcov
+*.tgz
+*.tsbuildinfo
+.DS_Store
+logs
+snapshots
+robot_output.xml
+log.html
+report.html
+tests/fixtures/*/generated/*
+!tests/fixtures/*/generated/.gitkeep
+!tests/fixtures/*/generated/firmware.elf
