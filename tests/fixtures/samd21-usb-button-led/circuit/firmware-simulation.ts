@@ -104,7 +104,21 @@ export default ({ circuitJson }: { circuitJson: CircuitJson }) => ({
       },
     },
   },
-  steps: [{ type: "wait" as const, milliseconds: 1 }],
+  steps: [
+    { type: "assert_led" as const, componentName: "LED1", isOn: false },
+    {
+      type: "set_button" as const,
+      componentName: "SW1",
+      isPressed: true,
+    },
+    { type: "assert_led" as const, componentName: "LED1", isOn: true },
+    {
+      type: "set_button" as const,
+      componentName: "SW1",
+      isPressed: false,
+    },
+    { type: "assert_led" as const, componentName: "LED1", isOn: false },
+  ],
   timeoutMilliseconds: 30_000,
 })
 
