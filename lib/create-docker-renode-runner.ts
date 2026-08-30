@@ -1,4 +1,4 @@
-import { createServer } from "node:net"
+import { getAvailableLocalPort } from "./get-available-local-port"
 import { runCommand } from "./run-command"
 import { runCommandWithUsbProgramming } from "./run-command-with-usb-programming"
 import type { RenodeRunner } from "./types"
@@ -8,24 +8,6 @@ export interface DockerRenodeRunnerOptions {
   image?: string
   containerPlatform?: string
 }
-
-const getAvailableLocalPort = (): Promise<number> =>
-  new Promise((resolve, reject) => {
-    const server = createServer()
-    server.once("error", reject)
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address()
-      if (!address || typeof address === "string") {
-        server.close()
-        reject(new Error("Could not allocate a local USB/IP port"))
-        return
-      }
-      server.close((error) => {
-        if (error) reject(error)
-        else resolve(address.port)
-      })
-    })
-  })
 
 export const createDockerRenodeRunner = (
   options: DockerRenodeRunnerOptions = {},

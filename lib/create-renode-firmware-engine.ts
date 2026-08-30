@@ -25,7 +25,7 @@ export interface RenodeFirmwareEngineOptions {
   keepTemporaryFiles?: boolean
 }
 
-const validateSimulationInput = async (
+export const validateSimulationInput = async (
   input: FirmwareSimulationInput,
 ): Promise<void> => {
   if (!input.name.trim()) throw new Error("Simulation name cannot be empty")

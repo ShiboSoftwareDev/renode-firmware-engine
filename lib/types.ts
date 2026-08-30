@@ -204,3 +204,27 @@ export interface RenodeFirmwareEngine {
     input: FirmwareSimulationInput,
   ) => Promise<FirmwareSimulationResult>
 }
+
+export interface FirmwareSimulationSessionState {
+  isRunning: boolean
+  displayStatus: "ready" | "stopped"
+  programming: FirmwareProgrammingResult
+  buttonStates: Record<string, boolean>
+  ledStates: Record<string, boolean>
+  virtualTimeMilliseconds: number
+}
+
+export interface RenodeFirmwareSession {
+  programming: FirmwareProgrammingResult
+  getState: () => Promise<FirmwareSimulationSessionState>
+  setButton: (request: {
+    componentName: string
+    isPressed: boolean
+  }) => Promise<FirmwareSimulationSessionState>
+  runFor: (milliseconds: number) => Promise<FirmwareSimulationSessionState>
+  stop: () => Promise<void>
+}
+
+export type FirmwareSimulationInputFactory = (request: {
+  circuitJson: CircuitJson
+}) => FirmwareSimulationInput | Promise<FirmwareSimulationInput>
