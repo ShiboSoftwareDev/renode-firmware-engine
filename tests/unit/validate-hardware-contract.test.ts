@@ -29,6 +29,23 @@ test("rejects firmware bindings that do not match the physical netlist", async (
   ).toThrow("U1.PA17 must connect to LED1.anode through R_LED")
 })
 
+test("rejects a direct switch LED path that bypasses its series resistor", async () => {
+  const input = await getFixtureInput()
+  const disconnectedCircuitJson = structuredClone(input.circuitJson)
+  const switchOutputTraceIndex = disconnectedCircuitJson.findIndex(
+    (element) =>
+      element.type === "source_trace" &&
+      element.name === "direct_switch_1_output",
+  )
+  disconnectedCircuitJson.splice(switchOutputTraceIndex, 1)
+
+  expect(() =>
+    validateHardwareContract(disconnectedCircuitJson, input.hardware),
+  ).toThrow(
+    "SW_DIRECT_1.pin2 must connect to LED_DIRECT_1.anode through R_LED_DIRECT_1",
+  )
+})
+
 test("rejects a USB data line that bypasses its series resistor", async () => {
   const input = await getFixtureInput()
   const disconnectedCircuitJson = structuredClone(input.circuitJson)

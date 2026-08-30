@@ -35,6 +35,20 @@ export interface RenodeButtonContract {
   bias?: RenodeButtonBiasContract
 }
 
+export interface DirectSwitchLedCircuitContract {
+  switchComponentName: string
+  switchInputPortName: string
+  switchOutputPortName: string
+  actuation: "momentary" | "latching"
+  supplyNetName: string
+  ledComponentName: string
+  ledAnodePortName: string
+  ledCathodePortName: string
+  seriesResistorComponentName: string
+  expectedResistanceOhms?: number
+  groundNetName: string
+}
+
 export interface RenodeResetContract {
   componentName: string
   manufacturerPartNumber?: string
@@ -93,6 +107,7 @@ export interface RenodeHardwareContract {
   platformRepl: string
   leds: RenodeLedContract[]
   buttons: RenodeButtonContract[]
+  directSwitchLedCircuits?: DirectSwitchLedCircuitContract[]
   reset?: RenodeResetContract
   usb?: RenodeUsbContract
 }

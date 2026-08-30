@@ -4,7 +4,7 @@ import { TS_1187A_B_A_B } from "./imports/TS_1187A_B_A_B"
 import { TYPE_C_31_M_12 } from "./imports/TYPE_C_31_M_12"
 
 export default () => (
-  <board width="55mm" height="45mm">
+  <board width="75mm" height="50mm">
     <ATSAMD21J17D_AFT
       name="U1"
       manufacturerPartNumber="ATSAMD21J17D-AFT"
@@ -201,6 +201,64 @@ export default () => (
       schY={-7}
     />
 
+    <TS_1187A_B_A_B
+      name="SW_DIRECT_1"
+      manufacturerPartNumber="TS-1187A-B-A-B"
+      pcbX={28}
+      pcbY={16}
+      schX={20}
+      schY={10}
+    />
+    <resistor
+      name="R_LED_DIRECT_1"
+      resistance="1k"
+      footprint="0402"
+      supplierPartNumbers={{ jlcpcb: ["C11702"] }}
+      pcbX={20}
+      pcbY={16}
+      schX={24}
+      schY={10}
+    />
+    <led
+      name="LED_DIRECT_1"
+      color="red"
+      footprint="0603"
+      supplierPartNumbers={{ jlcpcb: ["C2286"] }}
+      pcbX={14}
+      pcbY={16}
+      schX={28}
+      schY={10}
+    />
+
+    <TS_1187A_B_A_B
+      name="SW_DIRECT_2"
+      manufacturerPartNumber="TS-1187A-B-A-B"
+      pcbX={28}
+      pcbY={7}
+      schX={20}
+      schY={6}
+    />
+    <resistor
+      name="R_LED_DIRECT_2"
+      resistance="1k"
+      footprint="0402"
+      supplierPartNumbers={{ jlcpcb: ["C11702"] }}
+      pcbX={20}
+      pcbY={7}
+      schX={24}
+      schY={6}
+    />
+    <led
+      name="LED_DIRECT_2"
+      color="yellow"
+      footprint="0603"
+      supplierPartNumbers={{ jlcpcb: ["C72038"] }}
+      pcbX={14}
+      pcbY={11}
+      schX={28}
+      schY={6}
+    />
+
     <trace from=".USB1 > .A6" to="net.USB_DP_CONNECTOR" />
     <trace from=".USB1 > .B6" to="net.USB_DP_CONNECTOR" />
     <trace from="net.USB_DP_CONNECTOR" to=".R_USB_DP > .pin1" />
@@ -260,6 +318,44 @@ export default () => (
     />
     <trace name="reset_pullup" from=".U1 > .RESET" to=".R_RESET > .pin1" />
     <trace from=".R_RESET > .pin2" to="net.VCC" />
+
+    <trace from="net.VCC" to=".SW_DIRECT_1 > .pin1" />
+    <trace
+      name="direct_switch_1_pair_a"
+      from=".SW_DIRECT_1 > .pin3"
+      to=".SW_DIRECT_1 > .pin1"
+    />
+    <trace
+      name="direct_switch_1_output"
+      from=".SW_DIRECT_1 > .pin2"
+      to=".R_LED_DIRECT_1 > .pin1"
+    />
+    <trace
+      name="direct_switch_1_pair_b"
+      from=".SW_DIRECT_1 > .pin4"
+      to=".SW_DIRECT_1 > .pin2"
+    />
+    <trace from=".R_LED_DIRECT_1 > .pin2" to=".LED_DIRECT_1 > .anode" />
+    <trace from=".LED_DIRECT_1 > .cathode" to="net.GND" />
+
+    <trace from="net.VCC" to=".SW_DIRECT_2 > .pin1" />
+    <trace
+      name="direct_switch_2_pair_a"
+      from=".SW_DIRECT_2 > .pin3"
+      to=".SW_DIRECT_2 > .pin1"
+    />
+    <trace
+      name="direct_switch_2_output"
+      from=".SW_DIRECT_2 > .pin2"
+      to=".R_LED_DIRECT_2 > .pin1"
+    />
+    <trace
+      name="direct_switch_2_pair_b"
+      from=".SW_DIRECT_2 > .pin4"
+      to=".SW_DIRECT_2 > .pin2"
+    />
+    <trace from=".R_LED_DIRECT_2 > .pin2" to=".LED_DIRECT_2 > .anode" />
+    <trace from=".LED_DIRECT_2 > .cathode" to="net.GND" />
 
     <trace from=".U1 > .GND1" to="net.GND" />
     <trace from=".U1 > .GND2" to="net.GND" />

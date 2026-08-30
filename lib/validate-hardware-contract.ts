@@ -1,6 +1,7 @@
 import type { AnyCircuitElement, CircuitJson } from "circuit-json"
 import { toRenodeIdentifier } from "./renode-identifiers"
 import type {
+  DirectSwitchLedCircuitContract,
   RenodeButtonContract,
   RenodeHardwareContract,
   RenodeLedContract,
@@ -452,6 +453,147 @@ const validateLed = (
   ) {
     issues.push(
       `${request.led.componentName}.${request.led.referencePortName} must connect to ${request.led.referenceNetName}`,
+    )
+  }
+  return issues
+}
+
+const validateDirectSwitchLedCircuit = (
+  circuit: DirectSwitchLedCircuitContract,
+  circuitIndex: CircuitIndex,
+): string[] => {
+  const issues: string[] = []
+  const switchComponent = findComponent(
+    circuit.switchComponentName,
+    circuitIndex,
+  )
+  const ledComponent = findComponent(circuit.ledComponentName, circuitIndex)
+  const resistorComponent = findComponent(
+    circuit.seriesResistorComponentName,
+    circuitIndex,
+  )
+  const switchInputPort = findPort(
+    {
+      componentName: circuit.switchComponentName,
+      portName: circuit.switchInputPortName,
+    },
+    circuitIndex,
+  )
+  const switchOutputPort = findPort(
+    {
+      componentName: circuit.switchComponentName,
+      portName: circuit.switchOutputPortName,
+    },
+    circuitIndex,
+  )
+  const ledAnodePort = findPort(
+    {
+      componentName: circuit.ledComponentName,
+      portName: circuit.ledAnodePortName,
+    },
+    circuitIndex,
+  )
+  const ledCathodePort = findPort(
+    {
+      componentName: circuit.ledComponentName,
+      portName: circuit.ledCathodePortName,
+    },
+    circuitIndex,
+  )
+  const supplyNet = findNet(circuit.supplyNetName, circuitIndex)
+  const groundNet = findNet(circuit.groundNetName, circuitIndex)
+  const context = {
+    circuitIndex,
+    graph: createConnectivityGraph(circuitIndex),
+  }
+
+  if (!switchComponent) {
+    issues.push(`Missing switch ${circuit.switchComponentName}`)
+  } else if (
+    switchComponent.ftype !== "simple_push_button" &&
+    switchComponent.ftype !== "simple_switch"
+  ) {
+    issues.push(
+      `${circuit.switchComponentName} must be a switch or push button`,
+    )
+  }
+  if (!ledComponent) issues.push(`Missing LED ${circuit.ledComponentName}`)
+  else if (ledComponent.ftype !== "simple_led") {
+    issues.push(`${circuit.ledComponentName} must be an LED`)
+  }
+  if (!switchInputPort) {
+    issues.push(
+      `Missing switch port ${circuit.switchComponentName}.${circuit.switchInputPortName}`,
+    )
+  }
+  if (!switchOutputPort) {
+    issues.push(
+      `Missing switch port ${circuit.switchComponentName}.${circuit.switchOutputPortName}`,
+    )
+  }
+  if (!ledAnodePort) {
+    issues.push(
+      `Missing LED port ${circuit.ledComponentName}.${circuit.ledAnodePortName}`,
+    )
+  }
+  if (!ledCathodePort) {
+    issues.push(
+      `Missing LED port ${circuit.ledComponentName}.${circuit.ledCathodePortName}`,
+    )
+  }
+  if (!supplyNet) issues.push(`Missing net ${circuit.supplyNetName}`)
+  if (!groundNet) issues.push(`Missing net ${circuit.groundNetName}`)
+  if (!resistorComponent) {
+    issues.push(`Missing resistor ${circuit.seriesResistorComponentName}`)
+  } else {
+    validateResistance(
+      {
+        component: resistorComponent,
+        expectedResistanceOhms: circuit.expectedResistanceOhms,
+      },
+      issues,
+    )
+  }
+
+  if (
+    switchInputPort &&
+    supplyNet &&
+    !isPortConnectedToNet(
+      { port: switchInputPort, net: supplyNet },
+      context.graph,
+    )
+  ) {
+    issues.push(
+      `${circuit.switchComponentName}.${circuit.switchInputPortName} must connect to ${circuit.supplyNetName}`,
+    )
+  }
+  if (
+    switchOutputPort &&
+    ledAnodePort &&
+    resistorComponent &&
+    !hasConnectedSeriesPath(
+      {
+        firstPort: switchOutputPort,
+        secondPort: ledAnodePort,
+        seriesComponent: resistorComponent,
+      },
+      context,
+    )
+  ) {
+    issues.push(
+      `${circuit.switchComponentName}.${circuit.switchOutputPortName} must connect to ${circuit.ledComponentName}.${circuit.ledAnodePortName} through ${circuit.seriesResistorComponentName}`,
+    )
+  }
+  if (
+    ledCathodePort &&
+    groundNet &&
+    !isPortConnectedToNet(
+      { port: ledCathodePort, net: groundNet },
+      context.graph,
+    )
+  ) {
+    issues.push(
+      `${circuit.ledComponentName}.${circuit.ledCathodePortName} must connect to ${circuit.groundNetName}`,
     )
   }
   return issues
@@ -1185,6 +1327,9 @@ export const validateHardwareContract = (
         circuitIndex,
       ),
     )
+  }
+  for (const circuit of hardware.directSwitchLedCircuits ?? []) {
+    issues.push(...validateDirectSwitchLedCircuit(circuit, circuitIndex))
   }
   if (hardware.reset) {
     issues.push(
