@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tscircuit/renode-firmware-engine"
+    "url": "https://github.com/ShiboSoftwareDev/renode-firmware-engine"
   },
   "description": "A tscircuit-compatible firmware simulation engine using Renode.",
   "type": "module",
