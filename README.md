@@ -213,6 +213,13 @@ bun run build:fixture-firmware
 bun run test:e2e
 ```
 
+For a human-readable local demonstration of the USB programming receipt and
+switch/LED scenario, run:
+
+```sh
+bun run demo
+```
+
 Rebuild the tscircuit artifacts with:
 
 ```sh
