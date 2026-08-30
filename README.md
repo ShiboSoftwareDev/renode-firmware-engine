@@ -165,6 +165,49 @@ console.log(result.programming)
 // }
 ```
 
+## tscircuit firmware simulation tab
+
+The companion RunFrame and CLI integration adds **Firmware Simulation** beside
+the PCB, Schematic, 3D, and Analog Simulation views in `tsci dev`. The view
+reuses the evaluated schematic and adds a persistent Renode control panel for
+USB programming, switches, LEDs, and virtual time.
+
+Point `tscircuit.config.json` at a project-local simulation definition:
+
+```json
+{
+  "firmwareSimulationConfigPath": "firmware-simulation.ts"
+}
+```
+
+Then default-export a typed factory. Relative firmware paths are resolved from
+this configuration file:
+
+```ts
+import { defineFirmwareSimulation } from "@tscircuit/renode-firmware-engine"
+
+export default defineFirmwareSimulation(({ circuitJson }) => ({
+  name: "Program over USB, then mirror SW1 onto LED1",
+  circuitJson,
+  firmware: {
+    path: "../generated/firmware.bin",
+    format: "binary",
+    programming: { method: "usb_sam_ba", loadAddress: 0x2000 },
+    stackPointer: 0x20004000,
+    entryPoint: 0x2100,
+  },
+  hardware: {
+    // MCU, Renode platform, USB, switch, and LED bindings
+  },
+  steps: [],
+}))
+```
+
+The complete configuration is in
+[`tests/fixtures/samd21-usb-button-led/circuit/firmware-simulation.ts`](./tests/fixtures/samd21-usb-button-led/circuit/firmware-simulation.ts).
+Click **Program Firmware over USB** once, then interact with switches and LEDs
+without restarting or reprogramming the MCU session.
+
 The bare `createRenodeFirmwareEngine()` call uses a native `renode-test` and
 expects Renode's USB/IP server on `127.0.0.1:3240`. The Docker runner publishes
 that server on a random loopback-only host port, allowing parallel test runs.

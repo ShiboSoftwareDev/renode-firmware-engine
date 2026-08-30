@@ -11,6 +11,7 @@
       "!**/dist",
       "!**/generated",
       "!**/node_modules",
+      "!**/.tscircuit",
       "!**/package.json",
       "!tests/fixtures/**/circuit/circuit.json",
       "!tests/fixtures/**/__snapshots__"
