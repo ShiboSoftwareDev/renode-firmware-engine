@@ -164,7 +164,14 @@ export default () => (
       schX={11}
       schY={4}
     />
-    <TS_1187A_B_A_B name="SW1" pcbX={12} pcbY={-3} schX={11} schY={-2} />
+    <TS_1187A_B_A_B
+      name="SW1"
+      manufacturerPartNumber="TS-1187A-B-A-B"
+      pcbX={12}
+      pcbY={-3}
+      schX={11}
+      schY={-2}
+    />
     <resistor
       name="R_BUTTON"
       resistance="10k"
@@ -175,7 +182,14 @@ export default () => (
       schX={7}
       schY={-4}
     />
-    <TS_1187A_B_A_B name="SW_RESET" pcbX={21} pcbY={-9} schX={15} schY={-4} />
+    <TS_1187A_B_A_B
+      name="SW_RESET"
+      manufacturerPartNumber="TS-1187A-B-A-B"
+      pcbX={21}
+      pcbY={-9}
+      schX={15}
+      schY={-4}
+    />
     <resistor
       name="R_RESET"
       resistance="10k"

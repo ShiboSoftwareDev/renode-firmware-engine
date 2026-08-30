@@ -50,7 +50,6 @@ export default ({ circuitJson }: { circuitJson: CircuitJson }) => ({
     ],
     reset: {
       componentName: "SW_RESET",
-      manufacturerPartNumber: "TS-1187A-B-A-B",
       mcuPortName: "RESET",
       signalPortName: "pin1",
       referencePortName: "pin2",
