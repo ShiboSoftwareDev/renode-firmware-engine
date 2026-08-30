@@ -11,7 +11,7 @@ The default USB flow performs the same sequence as a real development cycle:
 ```text
 Circuit JSON -> hardware-contract check -> USB bootloader enumerates
              -> host erases/transfers binary -> application starts
-             -> switches, LEDs, UART, and virtual time are tested
+             -> physical switches, reset, LEDs, and UART are tested
 ```
 
 This is real host-to-device traffic inside the simulation. The host discovers a
@@ -25,12 +25,15 @@ silently inject the application with `LoadELF`.
 - Uses a built-in, unprivileged USB/IP host client; Docker does not need
   `--privileged`, `sudo`, a kernel USB/IP module, or a physical `/dev/ttyACM*`.
 - Validates the MCU, USB connector MPN, both USB-C orientations, D+/D- series
-  resistors, CC pull-downs, VBUS, ground, LEDs, switches, bias resistors, and
-  MCU pin names against Circuit JSON before Renode starts.
+  resistors, CC pull-downs, VBUS, regulator, MCU power/ground pins, reset
+  switch, reset pull-up, LEDs, switches, bias resistors, and MCU pin names
+  against Circuit JSON before Renode starts. Direct VBUS/GND, rail/ground,
+  D+/D-, and USB-data-to-rail shorts are rejected.
 - Executes the programmed image on Renode's Cortex-M CPU and SoC peripheral
   models.
 - Drives physical switch bindings and observes physical LED bindings.
-- Supports virtual-time waits and UART-line assertions.
+- Supports deterministic waits for automated tests and UART-line assertions;
+  interactive users are not given impossible pause/reset-time controls.
 - Returns programming byte count, SHA-256, acknowledgement status, Robot test
   results, process logs, and duration.
 - Retains direct ELF preloading as an explicit fast path for low-level firmware
@@ -170,7 +173,7 @@ console.log(result.programming)
 The companion RunFrame and CLI integration adds **Firmware Simulation** beside
 the PCB, Schematic, 3D, and Analog Simulation views in `tsci dev`. The view
 reuses the evaluated schematic and adds a persistent Renode control panel for
-USB programming, switches, LEDs, and virtual time.
+USB programming, physical reset/switch actions, and LEDs.
 
 Point `tscircuit.config.json` at a project-local simulation definition:
 
@@ -221,10 +224,12 @@ The complete configuration is in
 The tab deliberately follows the physical bench workflow:
 
 1. Edit the project-owned firmware source and click **Save & Build**.
-2. Click **Plug USB cable** to power the board and expose its SAM-BA bootloader.
+2. Click **Plug USB cable**. The routed copper and declared netlist are checked
+   before VBUS is applied; a detected short trips the simulated host port.
 3. Click **Program Firmware over USB** to transfer and execute the built binary.
-4. Run the virtual MCU clock, press switches, observe LEDs, enter the bootloader
-   again to reflash, or unplug USB to remove power.
+4. The MCU runs continuously. Press physical switches and observe LEDs. To
+   reflash, double-press the declared reset switch within its configured window;
+   unplugging USB removes power while retaining the flashed image.
 
 The included source blinks `LED1` while `SW1` is released and holds it on while
 the switch is pressed. The firmware editor changes the real source file; the
@@ -306,8 +311,8 @@ The physical MCU must already contain a USB bootloader compatible with the
 selected SAM-BA protocol and VID/PID; a blank MCU normally needs that bootloader
 installed once through SWD or as a programming service. After that, the real
 workflow is USB plug-in, bootloader entry, binary upload, reset, and application
-execution. The protocol transfer and application execution are exercised here;
-the bootloader-entry gesture is abstracted as an already-active bootloader.
+execution. The protocol transfer, application execution, USB-only power cycle,
+and configured physical reset gesture are exercised here.
 
 Renode's `ArduinoLoader` is a protocol-level bootloader model, not execution of
 your chosen bootloader's own firmware. Test that bootloader separately if its

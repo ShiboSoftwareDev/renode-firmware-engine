@@ -51,3 +51,49 @@ test("rejects a different MCU part number", async () => {
     validateHardwareContract(input.circuitJson, input.hardware),
   ).toThrow("U1 must use ATSAMD21J18A-AU")
 })
+
+test("rejects a logical USB power short", async () => {
+  const input = await getFixtureInput()
+  const shortedCircuitJson = structuredClone(input.circuitJson)
+  const vbus = shortedCircuitJson.find(
+    (element) => element.type === "source_net" && element.name === "VBUS",
+  )
+  const ground = shortedCircuitJson.find(
+    (element) => element.type === "source_net" && element.name === "GND",
+  )
+  const traceTemplate = shortedCircuitJson.find(
+    (element) => element.type === "source_trace",
+  )
+  if (
+    vbus?.type !== "source_net" ||
+    ground?.type !== "source_net" ||
+    traceTemplate?.type !== "source_trace"
+  ) {
+    throw new Error("Fixture must contain VBUS, GND, and a source trace")
+  }
+  shortedCircuitJson.push({
+    ...traceTemplate,
+    source_trace_id: "source_trace_vbus_ground_short",
+    name: "vbus_ground_short",
+    connected_source_port_ids: [],
+    connected_source_net_ids: [vbus.source_net_id, ground.source_net_id],
+  })
+
+  expect(() =>
+    validateHardwareContract(shortedCircuitJson, input.hardware),
+  ).toThrow("USB VBUS and GND must not be shorted together")
+})
+
+test("requires the physical reset button wiring", async () => {
+  const input = await getFixtureInput()
+  const disconnectedCircuitJson = structuredClone(input.circuitJson)
+  const resetTraceIndex = disconnectedCircuitJson.findIndex(
+    (element) =>
+      element.type === "source_trace" && element.name === "reset_button",
+  )
+  disconnectedCircuitJson.splice(resetTraceIndex, 1)
+
+  expect(() =>
+    validateHardwareContract(disconnectedCircuitJson, input.hardware),
+  ).toThrow("U1.RESET must connect to SW_RESET.pin1")
+})

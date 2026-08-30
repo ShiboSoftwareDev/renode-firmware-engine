@@ -24,6 +24,19 @@ test("keeps programmed firmware alive while switches drive LEDs", async () => {
     })
     expect(releasedState.buttonStates.SW1).toBe(false)
     expect(releasedState.ledStates.LED1).toBe(false)
+
+    const poweredOffState = await session.powerOff()
+    expect(poweredOffState.isPowered).toBe(false)
+    expect(poweredOffState.isRunning).toBe(false)
+
+    const poweredOnState = await session.powerOn()
+    expect(poweredOnState.isPowered).toBe(true)
+    expect(poweredOnState.isRunning).toBe(true)
+    expect(poweredOnState.ledStates.LED1).toBe(false)
+
+    const resetState = await session.reset()
+    expect(resetState.isPowered).toBe(true)
+    expect(resetState.ledStates.LED1).toBe(false)
   } finally {
     await session.stop()
   }

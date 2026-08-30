@@ -61,6 +61,7 @@ const readBooleanProperty = (
 class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
   private buttonStates: Record<string, boolean>
   private virtualTimeMilliseconds = 0
+  private isPowered = true
   private isStopped = false
 
   constructor(
@@ -76,9 +77,10 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
   }
 
   async getState(): Promise<FirmwareSimulationSessionState> {
-    if (this.isStopped) {
+    if (this.isStopped || !this.isPowered) {
       return {
         isRunning: false,
+        isPowered: false,
         displayStatus: "stopped",
         programming: this.programming,
         buttonStates: { ...this.buttonStates },
@@ -98,6 +100,7 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
     }
     return {
       isRunning: true,
+      isPowered: true,
       displayStatus: "ready",
       programming: this.programming,
       buttonStates: { ...this.buttonStates },
@@ -111,6 +114,7 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
     isPressed: boolean
   }): Promise<FirmwareSimulationSessionState> {
     if (this.isStopped) throw new Error("The firmware session is stopped")
+    if (!this.isPowered) throw new Error("The simulated board is not powered")
     const button = this.input.hardware.buttons.find(
       (candidate) => candidate.componentName === request.componentName,
     )
@@ -128,6 +132,7 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
 
   async runFor(milliseconds: number): Promise<FirmwareSimulationSessionState> {
     if (this.isStopped) throw new Error("The firmware session is stopped")
+    if (!this.isPowered) throw new Error("The simulated board is not powered")
     if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
       throw new Error("Virtual time must be greater than zero")
     }
@@ -136,9 +141,51 @@ class DockerRenodeFirmwareSession implements RenodeFirmwareSession {
     return this.getState()
   }
 
+  async reset(): Promise<FirmwareSimulationSessionState> {
+    if (this.isStopped) throw new Error("The firmware session is stopped")
+    if (!this.isPowered) throw new Error("The simulated board is not powered")
+    await this.monitor.execute("machine Reset")
+    if (this.input.firmware.format === "binary") {
+      const programming = this.input.firmware.programming
+      const cpuPeripheralPath = programming.cpuPeripheralPath ?? "sysbus.cpu"
+      await this.monitor.execute(
+        `${cpuPeripheralPath} SetRegister 13 ${formatHex(this.input.firmware.stackPointer)}`,
+      )
+      await this.monitor.execute(
+        `${cpuPeripheralPath} PC ${formatHex(this.input.firmware.entryPoint)}`,
+      )
+    }
+    this.buttonStates = Object.fromEntries(
+      this.input.hardware.buttons.map((button) => [
+        button.componentName,
+        false,
+      ]),
+    )
+    return this.runFor(1)
+  }
+
+  async powerOff(): Promise<FirmwareSimulationSessionState> {
+    if (this.isStopped) throw new Error("The firmware session is stopped")
+    this.isPowered = false
+    this.buttonStates = Object.fromEntries(
+      this.input.hardware.buttons.map((button) => [
+        button.componentName,
+        false,
+      ]),
+    )
+    return this.getState()
+  }
+
+  async powerOn(): Promise<FirmwareSimulationSessionState> {
+    if (this.isStopped) throw new Error("The firmware session is stopped")
+    this.isPowered = true
+    return this.reset()
+  }
+
   async stop(): Promise<void> {
     if (this.isStopped) return
     this.isStopped = true
+    this.isPowered = false
     this.monitor.close()
     await waitForProcessExit(this.child, 5_000)
     await rm(this.workspaceDirectory, { recursive: true, force: true })

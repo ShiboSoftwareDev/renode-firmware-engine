@@ -48,6 +48,21 @@ export default ({ circuitJson }: { circuitJson: CircuitJson }) => ({
         },
       },
     ],
+    reset: {
+      componentName: "SW_RESET",
+      manufacturerPartNumber: "TS-1187A-B-A-B",
+      mcuPortName: "RESET",
+      signalPortName: "pin1",
+      referencePortName: "pin2",
+      referenceNetName: "GND",
+      pullResistorComponentName: "R_RESET",
+      pullReferenceNetName: "VCC",
+      expectedPullResistanceOhms: 10_000,
+      bootloaderEntry: {
+        method: "double_press" as const,
+        maxIntervalMilliseconds: 1_000,
+      },
+    },
     usb: {
       connectorComponentName: "USB1",
       dataPlus: {
@@ -78,6 +93,16 @@ export default ({ circuitJson }: { circuitJson: CircuitJson }) => ({
           expectedResistanceOhms: 5_100,
         },
       ],
+      power: {
+        regulatorComponentName: "U_REG",
+        inputPortName: "VIN",
+        outputPortName: "VOUT",
+        groundPortName: "GND",
+        enablePortName: "EN",
+        outputNetName: "VCC",
+        mcuPowerPortNames: ["VDDIO1", "VDDIO2", "VDDIO3", "VDDANA", "VDDIN"],
+        mcuGroundPortNames: ["GND1", "GND2", "GND3", "GND4", "GNDANA"],
+      },
     },
   },
   steps: [{ type: "wait" as const, milliseconds: 1 }],

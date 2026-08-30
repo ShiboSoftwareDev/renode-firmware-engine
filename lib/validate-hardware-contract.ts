@@ -4,8 +4,10 @@ import type {
   RenodeButtonContract,
   RenodeHardwareContract,
   RenodeLedContract,
+  RenodeResetContract,
   RenodeUsbContract,
   RenodeUsbDataLineContract,
+  RenodeUsbPowerContract,
 } from "./types"
 
 type SourceComponent = Extract<AnyCircuitElement, { type: "source_component" }>
@@ -172,6 +174,18 @@ const isPortConnectedToNet = (
     {
       start: getEndpointKey("port", request.port.source_port_id),
       end: getEndpointKey("net", request.net.source_net_id),
+    },
+    graph,
+  )
+
+const areNetsConnected = (
+  request: { firstNet: SourceNet; secondNet: SourceNet },
+  graph: Map<string, Set<string>>,
+): boolean =>
+  hasConnectivityPath(
+    {
+      start: getEndpointKey("net", request.firstNet.source_net_id),
+      end: getEndpointKey("net", request.secondNet.source_net_id),
     },
     graph,
   )
@@ -556,6 +570,250 @@ const validateButton = (
   return issues
 }
 
+const validateReset = (
+  request: {
+    reset: RenodeResetContract
+    mcuComponentName: string
+  },
+  circuitIndex: CircuitIndex,
+): string[] => {
+  const issues: string[] = []
+  const resetComponent = findComponent(
+    request.reset.componentName,
+    circuitIndex,
+  )
+  const mcuPort = findPort(
+    {
+      componentName: request.mcuComponentName,
+      portName: request.reset.mcuPortName,
+    },
+    circuitIndex,
+  )
+  const signalPort = findPort(
+    {
+      componentName: request.reset.componentName,
+      portName: request.reset.signalPortName,
+    },
+    circuitIndex,
+  )
+  const referencePort = findPort(
+    {
+      componentName: request.reset.componentName,
+      portName: request.reset.referencePortName,
+    },
+    circuitIndex,
+  )
+  const referenceNet = findNet(request.reset.referenceNetName, circuitIndex)
+  const pullReferenceNet = findNet(
+    request.reset.pullReferenceNetName,
+    circuitIndex,
+  )
+  const pullResistor = findComponent(
+    request.reset.pullResistorComponentName,
+    circuitIndex,
+  )
+
+  if (!resetComponent) {
+    issues.push(`Missing reset button ${request.reset.componentName}`)
+  } else if (resetComponent.ftype !== "simple_push_button") {
+    issues.push(`${request.reset.componentName} must be a push button`)
+  } else if (
+    request.reset.manufacturerPartNumber &&
+    resetComponent.manufacturer_part_number !==
+      request.reset.manufacturerPartNumber
+  ) {
+    issues.push(
+      `${request.reset.componentName} must use ${request.reset.manufacturerPartNumber}, found ${resetComponent.manufacturer_part_number ?? "no manufacturer part number"}`,
+    )
+  }
+  if (!mcuPort) {
+    issues.push(
+      `Missing MCU reset port ${request.mcuComponentName}.${request.reset.mcuPortName}`,
+    )
+  }
+  if (!signalPort) {
+    issues.push(
+      `Missing reset button port ${request.reset.componentName}.${request.reset.signalPortName}`,
+    )
+  }
+  if (!referencePort) {
+    issues.push(
+      `Missing reset button port ${request.reset.componentName}.${request.reset.referencePortName}`,
+    )
+  }
+  if (!referenceNet)
+    issues.push(`Missing net ${request.reset.referenceNetName}`)
+  if (!pullReferenceNet) {
+    issues.push(`Missing net ${request.reset.pullReferenceNetName}`)
+  }
+  if (!pullResistor) {
+    issues.push(
+      `Missing reset pull resistor ${request.reset.pullResistorComponentName}`,
+    )
+  } else {
+    validateResistance(
+      {
+        component: pullResistor,
+        expectedResistanceOhms: request.reset.expectedPullResistanceOhms,
+      },
+      issues,
+    )
+  }
+  if (
+    mcuPort &&
+    signalPort &&
+    !hasTraceBetweenPorts(
+      { firstPort: mcuPort, secondPort: signalPort },
+      circuitIndex,
+    )
+  ) {
+    issues.push(
+      `${request.mcuComponentName}.${request.reset.mcuPortName} must connect to ${request.reset.componentName}.${request.reset.signalPortName}`,
+    )
+  }
+  if (
+    referencePort &&
+    referenceNet &&
+    !hasTraceBetweenPortAndNet(
+      { port: referencePort, net: referenceNet },
+      circuitIndex,
+    )
+  ) {
+    issues.push(
+      `${request.reset.componentName}.${request.reset.referencePortName} must connect to ${request.reset.referenceNetName}`,
+    )
+  }
+  if (
+    mcuPort &&
+    pullResistor &&
+    pullReferenceNet &&
+    !hasSeriesPathToNet(
+      {
+        firstPort: mcuPort,
+        net: pullReferenceNet,
+        seriesComponent: pullResistor,
+      },
+      circuitIndex,
+    )
+  ) {
+    issues.push(
+      `${request.reset.componentName}.${request.reset.signalPortName} must connect to ${request.reset.pullReferenceNetName} through ${request.reset.pullResistorComponentName}`,
+    )
+  }
+  return issues
+}
+
+const validateUsbPower = (
+  request: {
+    power: RenodeUsbPowerContract
+    mcuComponentName: string
+    vbusNet: SourceNet
+    groundNet: SourceNet
+  },
+  circuitIndex: CircuitIndex,
+  graph: Map<string, Set<string>>,
+): string[] => {
+  const issues: string[] = []
+  const outputNet = findNet(request.power.outputNetName, circuitIndex)
+  const regulator = findComponent(
+    request.power.regulatorComponentName,
+    circuitIndex,
+  )
+  if (!outputNet) issues.push(`Missing net ${request.power.outputNetName}`)
+  if (!regulator) {
+    issues.push(`Missing regulator ${request.power.regulatorComponentName}`)
+    return issues
+  }
+  const requireRegulatorPort = (
+    portName: string,
+    net: SourceNet,
+    netName: string,
+  ): void => {
+    const port = findPort(
+      { componentName: request.power.regulatorComponentName, portName },
+      circuitIndex,
+    )
+    if (!port) {
+      issues.push(
+        `Missing regulator port ${request.power.regulatorComponentName}.${portName}`,
+      )
+    } else if (!isPortConnectedToNet({ port, net }, graph)) {
+      issues.push(
+        `${request.power.regulatorComponentName}.${portName} must connect to ${netName}`,
+      )
+    }
+  }
+  requireRegulatorPort(
+    request.power.inputPortName,
+    request.vbusNet,
+    request.vbusNet.name,
+  )
+  requireRegulatorPort(
+    request.power.groundPortName,
+    request.groundNet,
+    request.groundNet.name,
+  )
+  if (outputNet) {
+    requireRegulatorPort(
+      request.power.outputPortName,
+      outputNet,
+      request.power.outputNetName,
+    )
+  }
+  if (request.power.enablePortName) {
+    requireRegulatorPort(
+      request.power.enablePortName,
+      request.vbusNet,
+      request.vbusNet.name,
+    )
+  }
+  if (
+    outputNet &&
+    areNetsConnected(
+      { firstNet: outputNet, secondNet: request.groundNet },
+      graph,
+    )
+  ) {
+    issues.push(
+      `${request.power.outputNetName} and ${request.groundNet.name} must not be shorted together`,
+    )
+  }
+  for (const portName of request.power.mcuPowerPortNames) {
+    const port = findPort(
+      { componentName: request.mcuComponentName, portName },
+      circuitIndex,
+    )
+    if (!port) {
+      issues.push(
+        `Missing MCU power port ${request.mcuComponentName}.${portName}`,
+      )
+    } else if (
+      outputNet &&
+      !isPortConnectedToNet({ port, net: outputNet }, graph)
+    ) {
+      issues.push(
+        `${request.mcuComponentName}.${portName} must connect to ${request.power.outputNetName}`,
+      )
+    }
+  }
+  for (const portName of request.power.mcuGroundPortNames) {
+    const port = findPort(
+      { componentName: request.mcuComponentName, portName },
+      circuitIndex,
+    )
+    if (!port) {
+      issues.push(
+        `Missing MCU ground port ${request.mcuComponentName}.${portName}`,
+      )
+    } else if (!isPortConnectedToNet({ port, net: request.groundNet }, graph)) {
+      issues.push(
+        `${request.mcuComponentName}.${portName} must connect to ${request.groundNet.name}`,
+      )
+    }
+  }
+  return issues
+}
+
 const validateUsbDataLine = (
   request: {
     lineName: "D+" | "D-"
@@ -711,6 +969,34 @@ const validateUsb = (
   const groundNet = findNet(request.usb.groundNetName, circuitIndex)
   if (!vbusNet) issues.push(`Missing net ${request.usb.vbusNetName}`)
   if (!groundNet) issues.push(`Missing net ${request.usb.groundNetName}`)
+  if (
+    vbusNet &&
+    groundNet &&
+    areNetsConnected({ firstNet: vbusNet, secondNet: groundNet }, graph)
+  ) {
+    issues.push(
+      `USB ${request.usb.vbusNetName} and ${request.usb.groundNetName} must not be shorted together`,
+    )
+  }
+  for (const [lineName, connectorPorts] of [
+    ["D+", dataPlus.connectorPorts],
+    ["D-", dataMinus.connectorPorts],
+  ] as const) {
+    for (const connectorPort of connectorPorts) {
+      if (
+        vbusNet &&
+        isPortConnectedToNet({ port: connectorPort, net: vbusNet }, graph)
+      ) {
+        issues.push(`USB ${lineName} must not be shorted to ${vbusNet.name}`)
+      }
+      if (
+        groundNet &&
+        isPortConnectedToNet({ port: connectorPort, net: groundNet }, graph)
+      ) {
+        issues.push(`USB ${lineName} must not be shorted to ${groundNet.name}`)
+      }
+    }
+  }
   for (const portName of request.usb.vbusPortNames) {
     const port = findPort(
       { componentName: request.usb.connectorComponentName, portName },
@@ -792,6 +1078,20 @@ const validateUsb = (
       )
     }
   }
+  if (request.usb.power && vbusNet && groundNet) {
+    issues.push(
+      ...validateUsbPower(
+        {
+          power: request.usb.power,
+          mcuComponentName: request.mcuComponentName,
+          vbusNet,
+          groundNet,
+        },
+        circuitIndex,
+        graph,
+      ),
+    )
+  }
   return issues
 }
 
@@ -854,6 +1154,14 @@ export const validateHardwareContract = (
     issues.push(
       ...validateButton(
         { button, mcuComponentName: hardware.mcu.componentName },
+        circuitIndex,
+      ),
+    )
+  }
+  if (hardware.reset) {
+    issues.push(
+      ...validateReset(
+        { reset: hardware.reset, mcuComponentName: hardware.mcu.componentName },
         circuitIndex,
       ),
     )

@@ -35,6 +35,22 @@ export interface RenodeButtonContract {
   bias?: RenodeButtonBiasContract
 }
 
+export interface RenodeResetContract {
+  componentName: string
+  manufacturerPartNumber?: string
+  mcuPortName: string
+  signalPortName: string
+  referencePortName: string
+  referenceNetName: string
+  pullResistorComponentName: string
+  pullReferenceNetName: string
+  expectedPullResistanceOhms?: number
+  bootloaderEntry?: {
+    method: "double_press"
+    maxIntervalMilliseconds?: number
+  }
+}
+
 export interface RenodeUsbDataLineContract {
   connectorPortNames: string[]
   mcuPortName: string
@@ -48,6 +64,17 @@ export interface RenodeUsbPullDownContract {
   expectedResistanceOhms?: number
 }
 
+export interface RenodeUsbPowerContract {
+  regulatorComponentName: string
+  inputPortName: string
+  outputPortName: string
+  groundPortName: string
+  enablePortName?: string
+  outputNetName: string
+  mcuPowerPortNames: string[]
+  mcuGroundPortNames: string[]
+}
+
 export interface RenodeUsbContract {
   connectorComponentName: string
   connectorManufacturerPartNumber?: string
@@ -58,6 +85,7 @@ export interface RenodeUsbContract {
   groundPortNames: string[]
   groundNetName: string
   configurationChannelPullDowns?: RenodeUsbPullDownContract[]
+  power?: RenodeUsbPowerContract
 }
 
 export interface RenodeHardwareContract {
@@ -65,6 +93,7 @@ export interface RenodeHardwareContract {
   platformRepl: string
   leds: RenodeLedContract[]
   buttons: RenodeButtonContract[]
+  reset?: RenodeResetContract
   usb?: RenodeUsbContract
 }
 
@@ -207,6 +236,7 @@ export interface RenodeFirmwareEngine {
 
 export interface FirmwareSimulationSessionState {
   isRunning: boolean
+  isPowered: boolean
   displayStatus: "ready" | "stopped"
   programming: FirmwareProgrammingResult
   buttonStates: Record<string, boolean>
@@ -222,6 +252,9 @@ export interface RenodeFirmwareSession {
     isPressed: boolean
   }) => Promise<FirmwareSimulationSessionState>
   runFor: (milliseconds: number) => Promise<FirmwareSimulationSessionState>
+  reset: () => Promise<FirmwareSimulationSessionState>
+  powerOff: () => Promise<FirmwareSimulationSessionState>
+  powerOn: () => Promise<FirmwareSimulationSessionState>
   stop: () => Promise<void>
 }
 
